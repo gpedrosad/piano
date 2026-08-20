@@ -23,6 +23,7 @@ export type OsmdDebugInfo = {
 export type ScoreReadyInfo = {
   measureCount: number;
   title?: string;
+  preferFlat?: boolean;
 };
 
 export type TooltipState = {

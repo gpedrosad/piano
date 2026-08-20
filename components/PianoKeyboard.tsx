@@ -12,6 +12,7 @@ type PianoKeyboardProps = {
   endMidi?: number;
   selectedMidi?: number | null;
   activeMidis?: number[];
+  preferFlat?: boolean;
   onKeyClick: (midi: number, scientificName: string) => void;
 };
 
@@ -20,6 +21,7 @@ export default function PianoKeyboard({
   endMidi = 84,
   selectedMidi = null,
   activeMidis = [],
+  preferFlat = false,
   onKeyClick,
 }: PianoKeyboardProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -32,11 +34,11 @@ export default function PianoKeyboard({
       list.push({
         midi,
         white: isWhiteKey(midi),
-        name: midiToNote(midi),
+        name: midiToNote(midi, preferFlat),
       });
     }
     return list;
-  }, [endMidi, startMidi]);
+  }, [endMidi, preferFlat, startMidi]);
 
   const whiteKeys = keys.filter((key) => key.white);
   const blackKeys = keys.filter((key) => !key.white);
@@ -114,7 +116,7 @@ export default function PianoKeyboard({
               key={key.midi}
               type="button"
               data-midi={key.midi}
-              aria-label={`${midiToSpanishNote(key.midi)} ${key.name}`}
+              aria-label={`${midiToSpanishNote(key.midi, preferFlat)} ${key.name}`}
               onClick={() => onKeyClick(key.midi, key.name)}
               className={`absolute bottom-0 border border-zinc-400 ${
                 active ? "bg-amber-200" : "bg-white hover:bg-zinc-50"
@@ -140,7 +142,7 @@ export default function PianoKeyboard({
               key={key.midi}
               type="button"
               data-midi={key.midi}
-              aria-label={`${midiToSpanishNote(key.midi)} ${key.name}`}
+              aria-label={`${midiToSpanishNote(key.midi, preferFlat)} ${key.name}`}
               onClick={() => onKeyClick(key.midi, key.name)}
               className={`absolute top-0 z-10 border border-zinc-900 ${
                 active ? "bg-amber-500" : "bg-zinc-900 hover:bg-zinc-700"

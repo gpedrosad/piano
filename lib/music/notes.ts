@@ -40,8 +40,15 @@ export function scientificNameFromOsmdNote(note: Note, midi: number): string {
   if (!pitch) return midiFallbackName(midi);
 
   const letter = Pitch.getNoteEnumString(pitch.FundamentalNote);
-  const accidental = accidentalToAscii(pitch.Accidental);
   const octave = octaveForSpelling(pitch, midi);
+  const letterPc = ((pitch.FundamentalNote % 12) + 12) % 12;
+  const midiPc = ((midi % 12) + 12) % 12;
+  let delta = midiPc - letterPc;
+  if (delta > 6) delta -= 12;
+  if (delta < -6) delta += 12;
+
+  const accidental =
+    delta === 0 ? "" : delta > 0 ? "#".repeat(delta) : "b".repeat(-delta);
   return `${letter}${accidental}${octave}`;
 }
 

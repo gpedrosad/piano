@@ -12,6 +12,7 @@ import {
   findNearestNote,
   getMeasureCount,
   graphicalNoteToSelected,
+  scorePrefersFlats,
   highlightMeasure,
   highlightNotes,
   isNoteInHandMode,
@@ -268,6 +269,7 @@ export default function ScoreViewer({
       callbacksRef.current.onReady({
         measureCount,
         title: osmd.Sheet?.TitleString || undefined,
+        preferFlat: scorePrefersFlats(osmd),
       });
       skipMeasureSyncRef.current = true;
       callbacksRef.current.onMeasureChange(1);

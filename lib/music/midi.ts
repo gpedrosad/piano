@@ -8,6 +8,16 @@ const LETTER_SEMITONES: Record<string, number> = {
   B: 11,
 };
 
+const LETTER_SPANISH: Record<string, string> = {
+  C: "DO",
+  D: "RE",
+  E: "MI",
+  F: "FA",
+  G: "SOL",
+  A: "LA",
+  B: "SI",
+};
+
 const SHARP_NAMES = [
   "C",
   "C#",
@@ -63,28 +73,27 @@ export function midiToSpanishNote(midi: number, preferFlat = false): string {
   return scientificToSpanish(scientific);
 }
 
-export function scientificToSpanish(scientificName: string): string {
+export function accidentalSpanishName(accidental: number): string {
+  if (accidental === 0) return "";
+  if (accidental === 1) return "sostenido";
+  if (accidental === -1) return "bemol";
+  if (accidental === 2) return "doble sostenido";
+  if (accidental === -2) return "doble bemol";
+  if (accidental > 0) return `${accidental} sostenidos`;
+  return `${-accidental} bemoles`;
+}
+
+export function scientificToSpanish(
+  scientificName: string,
+  withOctave = true,
+): string {
   const parsed = parseScientificNote(scientificName);
   if (!parsed) return scientificName;
 
-  const letterMap: Record<string, string> = {
-    C: "DO",
-    D: "RE",
-    E: "MI",
-    F: "FA",
-    G: "SOL",
-    A: "LA",
-    B: "SI",
-  };
-
-  const accidental =
-    parsed.accidental === 0
-      ? ""
-      : parsed.accidental > 0
-        ? "♯".repeat(parsed.accidental)
-        : "♭".repeat(-parsed.accidental);
-
-  return `${letterMap[parsed.letter]}${accidental}${parsed.octave}`;
+  const letter = LETTER_SPANISH[parsed.letter] ?? parsed.letter;
+  const accidental = accidentalSpanishName(parsed.accidental);
+  const name = accidental ? `${letter} ${accidental}` : letter;
+  return withOctave ? `${name} ${parsed.octave}` : name;
 }
 
 export function noteAnnouncementLabel(
@@ -92,21 +101,9 @@ export function noteAnnouncementLabel(
   spanishName: string,
   withOctave = false,
 ): string {
-  const parsed = parseScientificNote(scientificName);
-  if (!parsed) return `${scientificName} (${spanishName})`;
-
-  const accidental =
-    parsed.accidental === 0
-      ? ""
-      : parsed.accidental > 0
-        ? "♯".repeat(parsed.accidental)
-        : "♭".repeat(-parsed.accidental);
-
-  const letter = withOctave
-    ? `${parsed.letter}${accidental}${parsed.octave}`
-    : `${parsed.letter}${accidental}`;
-  const solfege = spanishName.replace(/-?\d+$/, "");
-  return `${letter} (${solfege})`;
+  const spoken = scientificToSpanish(scientificName, withOctave);
+  if (spoken !== scientificName) return spoken;
+  return spanishName.replace(/\s+-?\d+$/, "").trim() || scientificName;
 }
 
 export function notesAnnouncementLabel(

@@ -105,6 +105,7 @@ export default function PianoScoreApp() {
   const [playbackMidis, setPlaybackMidis] = useState<number[]>([]);
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [title, setTitle] = useState<string | undefined>();
+  const [preferFlat, setPreferFlat] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteStep, setNoteStep] = useState<NoteStepRequest | null>(null);
@@ -131,6 +132,7 @@ export default function PianoScoreApp() {
   const handleReady = useCallback((info: ScoreReadyInfo) => {
     setMeasureCount(info.measureCount);
     setTitle(info.title);
+    setPreferFlat(Boolean(info.preferFlat));
     setSelectedNotes([]);
     setDebugInfo(null);
     setPlaybackStatus("idle");
@@ -165,7 +167,7 @@ export default function PianoScoreApp() {
       const parsed = parseScientificNote(scientificName);
       const note: SelectedNote = {
         scientificName,
-        spanishName: midiToSpanishNote(midi) || scientificToSpanish(scientificName),
+        spanishName: midiToSpanishNote(midi, preferFlat) || scientificToSpanish(scientificName),
         midi,
         octave: parsed?.octave ?? Math.floor(midi / 12) - 1,
         measure: currentMeasure || 0,
@@ -177,7 +179,7 @@ export default function PianoScoreApp() {
       void playNote(scientificName);
       announceNotes([note]);
     },
-    [announceNotes, currentMeasure, playNote],
+    [announceNotes, currentMeasure, playNote, preferFlat],
   );
 
   const stepNote = useCallback((direction: -1 | 1) => {
@@ -354,6 +356,7 @@ export default function PianoScoreApp() {
               endMidi={84}
               selectedMidi={selectedNotes[0]?.midi ?? null}
               activeMidis={activeMidis}
+              preferFlat={preferFlat}
               onKeyClick={handlePianoClick}
             />
           </div>

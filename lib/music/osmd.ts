@@ -576,6 +576,19 @@ export function getMeasureCount(osmd: OpenSheetMusicDisplay): number {
   return osmd.Sheet?.SourceMeasures?.length ?? 0;
 }
 
+export function scorePrefersFlats(osmd: OpenSheetMusicDisplay): boolean {
+  const measure = osmd.Sheet?.SourceMeasures?.[0];
+  const entries = measure?.FirstInstructionsStaffEntries ?? [];
+  for (const entry of entries) {
+    if (!entry) continue;
+    for (const instruction of entry.Instructions ?? []) {
+      const key = (instruction as { Key?: unknown }).Key;
+      if (typeof key === "number") return key < 0;
+    }
+  }
+  return false;
+}
+
 export function durationSecondsFromCursor(
   osmd: OpenSheetMusicDisplay,
   tempoBpm: number,
