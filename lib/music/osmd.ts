@@ -10,6 +10,7 @@ import { durationFromOsmdNote } from "./durations";
 import {
   midiFromOsmdNote,
   scientificNameFromOsmdNote,
+  setScoreKeyFifths,
   spanishNameFromOsmdNote,
 } from "./notes";
 import type {
@@ -74,6 +75,7 @@ export function createOsmd(container: HTMLElement): OpenSheetMusicDisplay {
 export function collectGraphicalNotes(
   osmd: OpenSheetMusicDisplay,
 ): InteractiveGraphicalNote[] {
+  setScoreKeyFifths(keyFifthsFromOsmd(osmd));
   const notes: InteractiveGraphicalNote[] = [];
   const measureList = osmd.GraphicSheet?.MeasureList;
   if (!measureList) return notes;
@@ -576,17 +578,28 @@ export function getMeasureCount(osmd: OpenSheetMusicDisplay): number {
   return osmd.Sheet?.SourceMeasures?.length ?? 0;
 }
 
-export function scorePrefersFlats(osmd: OpenSheetMusicDisplay): boolean {
-  const measure = osmd.Sheet?.SourceMeasures?.[0];
-  const entries = measure?.FirstInstructionsStaffEntries ?? [];
-  for (const entry of entries) {
-    if (!entry) continue;
-    for (const instruction of entry.Instructions ?? []) {
-      const key = (instruction as { Key?: unknown }).Key;
-      if (typeof key === "number") return key < 0;
+export function keyFifthsFromOsmd(osmd: OpenSheetMusicDisplay): number {
+  const measures = osmd.Sheet?.SourceMeasures ?? [];
+  for (const measure of measures) {
+    for (const entry of measure.FirstInstructionsStaffEntries ?? []) {
+      if (!entry) continue;
+      for (const instruction of entry.Instructions ?? []) {
+        const key = (instruction as { Key?: unknown; AlteratedNotes?: unknown })
+          .Key;
+        if (
+          typeof key === "number" &&
+          "AlteratedNotes" in (instruction as object)
+        ) {
+          return key;
+        }
+      }
     }
   }
-  return false;
+  return 0;
+}
+
+export function scorePrefersFlats(osmd: OpenSheetMusicDisplay): boolean {
+  return keyFifthsFromOsmd(osmd) < 0;
 }
 
 export function durationSecondsFromCursor(
