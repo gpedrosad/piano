@@ -87,6 +87,51 @@ export function scientificToSpanish(scientificName: string): string {
   return `${letterMap[parsed.letter]}${accidental}${parsed.octave}`;
 }
 
+export function noteAnnouncementLabel(
+  scientificName: string,
+  spanishName: string,
+  withOctave = false,
+): string {
+  const parsed = parseScientificNote(scientificName);
+  if (!parsed) return `${scientificName} (${spanishName})`;
+
+  const accidental =
+    parsed.accidental === 0
+      ? ""
+      : parsed.accidental > 0
+        ? "♯".repeat(parsed.accidental)
+        : "♭".repeat(-parsed.accidental);
+
+  const letter = withOctave
+    ? `${parsed.letter}${accidental}${parsed.octave}`
+    : `${parsed.letter}${accidental}`;
+  const solfege = spanishName.replace(/-?\d+$/, "");
+  return `${letter} (${solfege})`;
+}
+
+export function notesAnnouncementLabel(
+  notes: Array<{ scientificName: string; spanishName: string; midi: number }>,
+): string {
+  const unique = uniqueByMidi(notes);
+  const withOctave = unique.length > 1;
+  return unique
+    .map((note) =>
+      noteAnnouncementLabel(note.scientificName, note.spanishName, withOctave),
+    )
+    .join(" · ");
+}
+
+function uniqueByMidi<T extends { midi: number }>(notes: T[]): T[] {
+  const seen = new Set<number>();
+  const unique: T[] = [];
+  for (const note of [...notes].sort((a, b) => a.midi - b.midi)) {
+    if (seen.has(note.midi)) continue;
+    seen.add(note.midi);
+    unique.push(note);
+  }
+  return unique;
+}
+
 export function parseScientificNote(note: string): {
   letter: string;
   letterSemitone: number;

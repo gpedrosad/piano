@@ -14,8 +14,12 @@ import {
   getMeasureCount,
   graphicalNoteToSelected,
   highlightMeasure,
-  highlightNote,
+  highlightNotes,
+  notesMatch,
+  scrollNoteIntoView,
   setCursorToMeasure,
+  soundingNotesAt,
+  stepToMomentNote,
   syncSecondaryCursor,
   type InteractiveGraphicalNote,
 } from "@/lib/music/osmd";
@@ -29,6 +33,11 @@ import type {
 } from "@/types/music";
 import type { GraphicalNote, OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 
+export type NoteStepRequest = {
+  id: number;
+  direction: -1 | 1;
+};
+
 type ScoreViewerProps = {
   musicXml: string;
   currentMeasure: number;
@@ -36,7 +45,8 @@ type ScoreViewerProps = {
   debug: boolean;
   playbackStatus: PlaybackStatus;
   tempo: number;
-  onSelectNote: (note: SelectedNote, debugInfo?: OsmdDebugInfo) => void;
+  noteStep?: NoteStepRequest | null;
+  onSelectNote: (notes: SelectedNote[], debugInfo?: OsmdDebugInfo) => void;
   onMeasureChange: (measure: number) => void;
   onReady: (info: ScoreReadyInfo) => void;
   onTooltip: Dispatch<SetStateAction<TooltipState>>;
@@ -52,6 +62,7 @@ export default function ScoreViewer({
   debug,
   playbackStatus,
   tempo,
+  noteStep,
   onSelectNote,
   onMeasureChange,
   onReady,
@@ -64,6 +75,7 @@ export default function ScoreViewer({
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const notesRef = useRef<InteractiveGraphicalNote[]>([]);
   const selectedGraphicalRef = useRef<GraphicalNote | null>(null);
+  const selectedGroupRef = useRef<GraphicalNote[]>([]);
   const listenersRef = useRef<Array<() => void>>([]);
   const playbackTimerRef = useRef<number | null>(null);
   const lastWidthRef = useRef(0);
@@ -113,21 +125,45 @@ export default function ScoreViewer({
 
   const selectGraphicalNote = useCallback(
     (gNote: GraphicalNote) => {
-      const selected = graphicalNoteToSelected(gNote);
-      if (!selected) return;
+      const group = soundingNotesAt(
+        notesRef.current,
+        gNote,
+        handModeRef.current,
+      );
+      const sounding = (group.length > 0 ? group : [gNote])
+        .map((note) => graphicalNoteToSelected(note))
+        .filter((note): note is SelectedNote => note !== null);
+      if (sounding.length === 0) return;
+
       selectedGraphicalRef.current = gNote;
-      highlightNote(notesRef.current, gNote);
+      selectedGroupRef.current = group.length > 0 ? group : [gNote];
+      highlightNotes(notesRef.current, selectedGroupRef.current);
       callbacksRef.current.onSelectNote(
-        selected,
+        sounding,
         debugRef.current ? debugInfoFromGraphicalNote(gNote) : undefined,
       );
-      if (selected.measure !== currentMeasureRef.current) {
+      const measure = sounding[0]?.measure;
+      if (measure && measure !== currentMeasureRef.current) {
         skipMeasureSyncRef.current = true;
-        callbacksRef.current.onMeasureChange(selected.measure);
+        callbacksRef.current.onMeasureChange(measure);
       }
     },
     [],
   );
+
+  useEffect(() => {
+    if (!noteStep) return;
+    const container = hostRef.current;
+    const nextNote = stepToMomentNote(
+      notesRef.current,
+      selectedGraphicalRef.current,
+      noteStep.direction,
+      handModeRef.current,
+    );
+    if (!nextNote) return;
+    selectGraphicalNote(nextNote);
+    if (container) scrollNoteIntoView(nextNote, container);
+  }, [noteStep, selectGraphicalNote]);
 
   const attachNoteListeners = useCallback(
     (osmd: OpenSheetMusicDisplay, container: HTMLElement) => {
@@ -202,8 +238,18 @@ export default function ScoreViewer({
       });
 
       applyHandMode(notes, handModeRef.current);
-      if (selectedGraphicalRef.current) {
-        highlightNote(notes, selectedGraphicalRef.current);
+      const current = selectedGraphicalRef.current;
+      if (current) {
+        const rematched =
+          notes.find((note) => notesMatch(note, current)) ?? current;
+        selectedGraphicalRef.current = rematched;
+        const group = soundingNotesAt(
+          notes,
+          rematched,
+          handModeRef.current,
+        );
+        selectedGroupRef.current = group.length > 0 ? group : [rematched];
+        highlightNotes(notes, selectedGroupRef.current);
       }
     },
     [clearListeners, selectGraphicalNote],
@@ -217,6 +263,7 @@ export default function ScoreViewer({
     stopPlaybackTimer();
     clearListeners();
     selectedGraphicalRef.current = null;
+    selectedGroupRef.current = [];
     container.replaceChildren();
     osmdRef.current = createOsmd(container);
 
@@ -281,9 +328,9 @@ export default function ScoreViewer({
     if (notesRef.current.length === 0) return;
     applyHandMode(notesRef.current, handMode);
     if (selectedGraphicalRef.current) {
-      highlightNote(notesRef.current, selectedGraphicalRef.current);
+      selectGraphicalNote(selectedGraphicalRef.current);
     }
-  }, [handMode]);
+  }, [handMode, selectGraphicalNote]);
 
   useEffect(() => {
     const osmd = osmdRef.current;
@@ -322,15 +369,26 @@ export default function ScoreViewer({
     }
 
     const gNotes = osmd.cursor.GNotesUnderCursor();
-    const sounding = gNotes
-      .map((gNote) => graphicalNoteToSelected(gNote))
-      .filter((note): note is SelectedNote => note !== null);
-    callbacksRef.current.onPlaybackNotes(sounding);
-    if (gNotes[0]) {
-      selectedGraphicalRef.current = gNotes[0];
-      highlightNote(notesRef.current, gNotes[0]);
-      const first = sounding[0];
-      if (first) callbacksRef.current.onSelectNote(first);
+    const anchor = gNotes[0];
+    if (anchor) {
+      const group = soundingNotesAt(
+        notesRef.current,
+        anchor,
+        handModeRef.current,
+      );
+      const displayed = (group.length > 0 ? group : gNotes)
+        .map((gNote) => graphicalNoteToSelected(gNote))
+        .filter((note): note is SelectedNote => note !== null);
+      const attacks = gNotes
+        .map((gNote) => graphicalNoteToSelected(gNote))
+        .filter((note): note is SelectedNote => note !== null);
+      selectedGraphicalRef.current = anchor;
+      selectedGroupRef.current = group.length > 0 ? group : gNotes;
+      highlightNotes(notesRef.current, selectedGroupRef.current);
+      callbacksRef.current.onPlaybackNotes(attacks);
+      if (displayed.length > 0) callbacksRef.current.onSelectNote(displayed);
+    } else {
+      callbacksRef.current.onPlaybackNotes([]);
     }
 
     const waitMs = durationSecondsFromCursor(osmd, tempoRef.current) * 1000;

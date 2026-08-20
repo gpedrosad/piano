@@ -189,6 +189,192 @@ export function handFromStaffIndex(index: number): Hand {
   return "unknown";
 }
 
+function relativeTime(gNote: GraphicalNote): number {
+  const fromStaff =
+    gNote.parentVoiceEntry?.parentStaffEntry?.relInMeasureTimestamp?.RealValue;
+  if (typeof fromStaff === "number") return fromStaff;
+  const fromSource = gNote.sourceNote?.ParentVoiceEntry?.Timestamp?.RealValue;
+  if (typeof fromSource === "number") return fromSource;
+  return 0;
+}
+
+export function playableNotesInOrder(
+  notes: InteractiveGraphicalNote[],
+): InteractiveGraphicalNote[] {
+  return notes
+    .filter(
+      (note) =>
+        Boolean(note.sourceNote) &&
+        !note.sourceNote.isRest() &&
+        Boolean(note.sourceNote.Pitch),
+    )
+    .slice()
+    .sort((a, b) => {
+      const measureA = a.sourceNote?.SourceMeasure?.MeasureNumber ?? 0;
+      const measureB = b.sourceNote?.SourceMeasure?.MeasureNumber ?? 0;
+      if (measureA !== measureB) return measureA - measureB;
+
+      const timeA = relativeTime(a);
+      const timeB = relativeTime(b);
+      if (timeA !== timeB) return timeA - timeB;
+
+      const staffA = a.sourceNote ? staffIndexFromNote(a.sourceNote) : 0;
+      const staffB = b.sourceNote ? staffIndexFromNote(b.sourceNote) : 0;
+      if (staffA !== staffB) return staffA - staffB;
+
+      const midiA = a.sourceNote ? (midiFromOsmdNote(a.sourceNote) ?? 0) : 0;
+      const midiB = b.sourceNote ? (midiFromOsmdNote(b.sourceNote) ?? 0) : 0;
+      return midiA - midiB;
+    });
+}
+
+export function notesMatch(
+  a: GraphicalNote | null,
+  b: GraphicalNote | null,
+): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const sourceA = a.sourceNote;
+  const sourceB = b.sourceNote;
+  if (!sourceA || !sourceB) return false;
+  return (
+    (sourceA.SourceMeasure?.MeasureNumber ?? 0) ===
+      (sourceB.SourceMeasure?.MeasureNumber ?? 0) &&
+    relativeTime(a) === relativeTime(b) &&
+    staffIndexFromNote(sourceA) === staffIndexFromNote(sourceB) &&
+    midiFromOsmdNote(sourceA) === midiFromOsmdNote(sourceB)
+  );
+}
+
+function timeKey(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+export function noteOnset(gNote: GraphicalNote): number {
+  const absolute = gNote.sourceNote?.getAbsoluteTimestamp?.()?.RealValue;
+  if (typeof absolute === "number") return absolute;
+  const measureAbs =
+    gNote.sourceNote?.SourceMeasure?.AbsoluteTimestamp?.RealValue ?? 0;
+  return measureAbs + relativeTime(gNote);
+}
+
+export function noteLength(gNote: GraphicalNote): number {
+  return gNote.sourceNote?.Length?.RealValue ?? 0;
+}
+
+export function soundingNotesAt(
+  notes: InteractiveGraphicalNote[],
+  moment: GraphicalNote,
+  mode: HandMode,
+): InteractiveGraphicalNote[] {
+  const t = timeKey(noteOnset(moment));
+  return playableNotesInOrder(notes).filter((note) => {
+    if (!isNoteInHandMode(note, mode)) return false;
+    const start = timeKey(noteOnset(note));
+    const end = timeKey(start + noteLength(note));
+    return start === t || (start < t && end > t);
+  });
+}
+
+export function notesStartingAtOnset(
+  notes: InteractiveGraphicalNote[],
+  onset: number,
+  mode: HandMode,
+): InteractiveGraphicalNote[] {
+  const t = timeKey(onset);
+  return playableNotesInOrder(notes).filter(
+    (note) =>
+      isNoteInHandMode(note, mode) && timeKey(noteOnset(note)) === t,
+  );
+}
+
+export function uniqueOnsets(
+  notes: InteractiveGraphicalNote[],
+  mode: HandMode,
+): number[] {
+  const keys = new Set<number>();
+  for (const note of playableNotesInOrder(notes)) {
+    if (!isNoteInHandMode(note, mode)) continue;
+    keys.add(timeKey(noteOnset(note)));
+  }
+  return [...keys].sort((a, b) => a - b);
+}
+
+export function stepToMomentNote(
+  notes: InteractiveGraphicalNote[],
+  current: GraphicalNote | null,
+  direction: -1 | 1,
+  mode: HandMode,
+): GraphicalNote | null {
+  const onsets = uniqueOnsets(notes, mode);
+  if (onsets.length === 0) return null;
+
+  const currentOnset = current ? timeKey(noteOnset(current)) : null;
+  let index =
+    currentOnset === null ? (direction > 0 ? -1 : onsets.length) : onsets.indexOf(currentOnset);
+
+  if (index === -1 && currentOnset !== null) {
+    if (direction > 0) {
+      index = onsets.findIndex((onset) => onset > currentOnset);
+      if (index === -1) return null;
+      return notesStartingAtOnset(notes, onsets[index], mode)[0] ?? null;
+    }
+    for (let i = onsets.length - 1; i >= 0; i -= 1) {
+      if (onsets[i] < currentOnset) {
+        return notesStartingAtOnset(notes, onsets[i], mode)[0] ?? null;
+      }
+    }
+    return null;
+  }
+
+  const next = index + direction;
+  if (next < 0 || next >= onsets.length) return null;
+  return notesStartingAtOnset(notes, onsets[next], mode)[0] ?? null;
+}
+
+export function isNoteInHandMode(
+  note: GraphicalNote,
+  mode: HandMode,
+): boolean {
+  if (mode === "both" || !note.sourceNote) return true;
+  const hand = handFromStaffIndex(staffIndexFromNote(note.sourceNote));
+  if (mode === "right") return hand !== "left";
+  if (mode === "left") return hand !== "right";
+  return true;
+}
+
+export function scrollNoteIntoView(
+  note: GraphicalNote,
+  container: HTMLElement,
+): void {
+  const vex = asVexNote(note);
+  const el =
+    vex?.getSVGGElement?.() ??
+    vex?.getNoteheadSVGs?.()?.[0] ??
+    null;
+  if (!(el instanceof Element)) return;
+
+  const scroller = container.parentElement;
+  if (!scroller) return;
+
+  const targetRect = el.getBoundingClientRect();
+  const scrollerRect = scroller.getBoundingClientRect();
+  const padding = 28;
+  const visibleVertically =
+    targetRect.top >= scrollerRect.top + padding &&
+    targetRect.bottom <= scrollerRect.bottom - padding;
+  const visibleHorizontally =
+    targetRect.left >= scrollerRect.left + padding &&
+    targetRect.right <= scrollerRect.right - padding;
+
+  if (visibleVertically && visibleHorizontally) return;
+
+  scroller.scrollTo({
+    top: scroller.scrollTop + (targetRect.top - scrollerRect.top) - padding,
+    left: scroller.scrollLeft + (targetRect.left - scrollerRect.left) - padding,
+  });
+}
+
 export function applyHandMode(
   notes: InteractiveGraphicalNote[],
   mode: HandMode,
@@ -205,9 +391,9 @@ export function applyHandMode(
   }
 }
 
-export function highlightNote(
+export function highlightNotes(
   notes: InteractiveGraphicalNote[],
-  selected: GraphicalNote | null,
+  selected: GraphicalNote[],
 ): void {
   for (const note of notes) {
     try {
@@ -221,17 +407,25 @@ export function highlightNote(
     }
   }
 
-  if (!selected) return;
-  const target = selected as InteractiveGraphicalNote;
-  try {
-    target.setColor?.(SELECTED_COLOR, {
-      applyToNoteheads: true,
-      applyToStem: true,
-      applyToFlag: true,
-    });
-  } catch {
-    // Ignore coloring failures.
+  for (const item of selected) {
+    const target = item as InteractiveGraphicalNote;
+    try {
+      target.setColor?.(SELECTED_COLOR, {
+        applyToNoteheads: true,
+        applyToStem: true,
+        applyToFlag: true,
+      });
+    } catch {
+      // Ignore coloring failures.
+    }
   }
+}
+
+export function highlightNote(
+  notes: InteractiveGraphicalNote[],
+  selected: GraphicalNote | null,
+): void {
+  highlightNotes(notes, selected ? [selected] : []);
 }
 
 export function highlightMeasure(

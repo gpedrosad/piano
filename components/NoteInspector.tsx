@@ -3,7 +3,7 @@
 import type { OsmdDebugInfo, SelectedNote } from "@/types/music";
 
 type NoteInspectorProps = {
-  note: SelectedNote | null;
+  notes: SelectedNote[];
   debug: boolean;
   debugInfo: OsmdDebugInfo | null;
   compact?: boolean;
@@ -27,23 +27,27 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 export default function NoteInspector({
-  note,
+  notes,
   debug,
   debugInfo,
   compact = false,
 }: NoteInspectorProps) {
+  const note = notes[0] ?? null;
+  const sorted = [...notes].sort((a, b) => a.midi - b.midi);
+  const names = sorted.map((item) => item.spanishName).join(" · ");
+  const scientific = sorted.map((item) => item.scientificName).join(" · ");
+
   if (compact) {
     return (
       <section className="min-w-0">
         {note ? (
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <p className="text-base font-medium tracking-tight text-zinc-900 landscape:text-lg">
-              {note.spanishName}
+              {names}
             </p>
             <span className="text-xs text-zinc-500">
-              {note.scientificName} · {handLabel(note.hand)} · Compás{" "}
-              {note.measure}
-              {note.duration ? ` · ${note.duration}` : ""}
+              {scientific} · Compás {note.measure}
+              {notes.length === 1 && note.duration ? ` · ${note.duration}` : ""}
             </span>
           </div>
         ) : (
@@ -77,12 +81,12 @@ export default function NoteInspector({
         Nota seleccionada
       </h2>
       <p className="mt-3 font-sans text-3xl tracking-tight text-zinc-900">
-        {note.spanishName}
+        {names}
       </p>
       <dl className="mt-5 space-y-2 text-sm">
         <div className="grid grid-cols-[140px_1fr] gap-3">
           <dt className="text-zinc-500">Nombre internacional</dt>
-          <dd className="font-medium text-zinc-900">{note.scientificName}</dd>
+          <dd className="font-medium text-zinc-900">{scientific}</dd>
         </div>
         <div className="grid grid-cols-[140px_1fr] gap-3">
           <dt className="text-zinc-500">MIDI</dt>
