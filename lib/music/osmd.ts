@@ -199,26 +199,48 @@ function relativeTime(gNote: GraphicalNote): number {
   return 0;
 }
 
+export function noteTimestamp(gNote: GraphicalNote): number {
+  const absolute = gNote.sourceNote?.getAbsoluteTimestamp?.()?.RealValue;
+  if (typeof absolute === "number" && !Number.isNaN(absolute)) return absolute;
+  const measureAbs =
+    gNote.sourceNote?.SourceMeasure?.AbsoluteTimestamp?.RealValue ?? 0;
+  return measureAbs + relativeTime(gNote);
+}
+
+export function waitMsBetweenNotes(
+  current: GraphicalNote,
+  next: GraphicalNote | null,
+  tempoBpm: number,
+): number {
+  const beatMs = (60 / Math.max(20, tempoBpm)) * 1000;
+  if (!next) {
+    const len = current.sourceNote?.Length?.RealValue ?? 0.25;
+    return Math.max(90, len * 4 * beatMs);
+  }
+  const dt = noteTimestamp(next) - noteTimestamp(current);
+  if (dt <= 1e-3) return 200;
+  return Math.max(160, dt * 4 * beatMs);
+}
+
 export function playableNotesInOrder(
   notes: InteractiveGraphicalNote[],
 ): InteractiveGraphicalNote[] {
   return notes
-    .filter(
-      (note) =>
-        Boolean(note.sourceNote) &&
-        !note.sourceNote.isRest() &&
-        Boolean(note.sourceNote.Pitch) &&
-        !note.sourceNote.IsGraceNote,
-    )
+    .filter((note) => {
+      const source = note.sourceNote;
+      if (!source || source.isRest() || !source.Pitch) return false;
+      if (source.PrintObject === false) return false;
+      return true;
+    })
     .slice()
     .sort((a, b) => {
-      const measureA = a.sourceNote?.SourceMeasure?.MeasureNumber ?? 0;
-      const measureB = b.sourceNote?.SourceMeasure?.MeasureNumber ?? 0;
-      if (measureA !== measureB) return measureA - measureB;
-
-      const timeA = relativeTime(a);
-      const timeB = relativeTime(b);
+      const timeA = noteTimestamp(a);
+      const timeB = noteTimestamp(b);
       if (timeA !== timeB) return timeA - timeB;
+
+      const graceA = a.sourceNote?.IsGraceNote ? 0 : 1;
+      const graceB = b.sourceNote?.IsGraceNote ? 0 : 1;
+      if (graceA !== graceB) return graceA - graceB;
 
       const staffA = a.sourceNote ? staffIndexFromNote(a.sourceNote) : 0;
       const staffB = b.sourceNote ? staffIndexFromNote(b.sourceNote) : 0;
@@ -228,6 +250,16 @@ export function playableNotesInOrder(
       const midiB = b.sourceNote ? (midiFromOsmdNote(b.sourceNote) ?? 0) : 0;
       return midiA - midiB;
     });
+}
+
+export function indexOfPlayableNote(
+  ordered: GraphicalNote[],
+  current: GraphicalNote | null,
+): number {
+  if (!current) return -1;
+  const byReference = ordered.findIndex((note) => note === current);
+  if (byReference >= 0) return byReference;
+  return ordered.findIndex((note) => notesMatch(note, current));
 }
 
 export function notesMatch(
@@ -242,7 +274,7 @@ export function notesMatch(
   return (
     (sourceA.SourceMeasure?.MeasureNumber ?? 0) ===
       (sourceB.SourceMeasure?.MeasureNumber ?? 0) &&
-    relativeTime(a) === relativeTime(b) &&
+    Math.abs(noteTimestamp(a) - noteTimestamp(b)) < 1e-6 &&
     staffIndexFromNote(sourceA) === staffIndexFromNote(sourceB) &&
     midiFromOsmdNote(sourceA) === midiFromOsmdNote(sourceB)
   );
@@ -253,20 +285,10 @@ export function notesAtSameMoment(
   moment: GraphicalNote,
   mode: HandMode,
 ): InteractiveGraphicalNote[] {
-  const measure =
-    moment.sourceNote?.SourceMeasure?.MeasureNumber ??
-    moment.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.MeasureNumber ??
-    0;
-  const time = relativeTime(moment);
+  const time = noteTimestamp(moment);
   return playableNotesInOrder(notes).filter((note) => {
     if (!isNoteInHandMode(note, mode)) return false;
-    const noteMeasure =
-      note.sourceNote?.SourceMeasure?.MeasureNumber ??
-      note.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.MeasureNumber ??
-      0;
-    return (
-      noteMeasure === measure && Math.abs(relativeTime(note) - time) < 1e-6
-    );
+    return Math.abs(noteTimestamp(note) - time) < 1e-4;
   });
 }
 
@@ -281,9 +303,7 @@ export function stepToPlayableNote(
   );
   if (ordered.length === 0) return null;
 
-  const currentIndex = current
-    ? ordered.findIndex((note) => notesMatch(note, current))
-    : -1;
+  const currentIndex = indexOfPlayableNote(ordered, current);
   const from =
     currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : ordered.length;
   const next = from + direction;

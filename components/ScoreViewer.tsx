@@ -9,19 +9,20 @@ import {
   collectGraphicalNotes,
   createOsmd,
   debugInfoFromGraphicalNote,
-  durationSecondsFromCursor,
   findNearestNote,
   getMeasureCount,
   graphicalNoteToSelected,
   highlightMeasure,
   highlightNotes,
-  notesAtSameMoment,
+  isNoteInHandMode,
   notesMatch,
   ownNotehead,
+  indexOfPlayableNote,
+  playableNotesInOrder,
   scrollNoteIntoView,
   setCursorToMeasure,
   stepToPlayableNote,
-  syncSecondaryCursor,
+  waitMsBetweenNotes,
   type InteractiveGraphicalNote,
 } from "@/lib/music/osmd";
 import type {
@@ -79,8 +80,7 @@ export default function ScoreViewer({
   const selectedGroupRef = useRef<GraphicalNote[]>([]);
   const listenersRef = useRef<Array<() => void>>([]);
   const playbackTimerRef = useRef<number | null>(null);
-  const playbackQueueRef = useRef<GraphicalNote[]>([]);
-  const playbackSlotMsRef = useRef(0);
+  const playbackIndexRef = useRef(0);
   const lastWidthRef = useRef(0);
   const skipMeasureSyncRef = useRef(false);
   const currentMeasureRef = useRef(currentMeasure);
@@ -338,111 +338,81 @@ export default function ScoreViewer({
 
   stepPlaybackRef.current = () => {
     const osmd = osmdRef.current;
-    if (!osmd?.cursor) return;
+    if (!osmd) return;
     if (playbackStatusRef.current !== "playing") return;
 
-    const playOne = (gNote: GraphicalNote) => {
-      const selected = graphicalNoteToSelected(gNote);
-      if (!selected) return false;
-      selectedGraphicalRef.current = gNote;
-      selectedGroupRef.current = [gNote];
-      highlightNotes(notesRef.current, selectedGroupRef.current);
-      callbacksRef.current.onPlaybackNotes([selected]);
-      callbacksRef.current.onSelectNote([selected]);
-      return true;
-    };
-
-    if (playbackQueueRef.current.length > 0) {
-      const next = playbackQueueRef.current.shift();
-      if (next) playOne(next);
-      const remaining = playbackQueueRef.current.length;
-      const waitMs =
-        remaining > 0
-          ? 120
-          : Math.max(80, playbackSlotMsRef.current);
-      if (remaining === 0) osmd.cursor.next();
-      playbackTimerRef.current = window.setTimeout(
-        () => stepPlaybackRef.current(),
-        waitMs,
-      );
+    const ordered = playableNotesInOrder(notesRef.current).filter((note) =>
+      isNoteInHandMode(note, handModeRef.current),
+    );
+    if (ordered.length === 0) {
+      callbacksRef.current.onPlaybackStatusChange("idle");
       return;
     }
 
-    if (osmd.cursor.iterator.EndReached) {
-      osmd.cursor.reset();
-      osmd.cursor.hide();
+    let index = playbackIndexRef.current;
+    if (index < 0) {
+      const fromSelected = indexOfPlayableNote(
+        ordered,
+        selectedGraphicalRef.current,
+      );
+      index = fromSelected >= 0 ? fromSelected : 0;
+    }
+
+    if (index >= ordered.length) {
+      osmd.cursor?.reset();
+      osmd.cursor?.hide();
+      playbackIndexRef.current = 0;
       callbacksRef.current.onPlaybackStatusChange("idle");
       callbacksRef.current.onPlaybackNotes([]);
       return;
     }
 
-    osmd.cursor.show();
-    syncSecondaryCursor(osmd);
-    const measure = osmd.cursor.iterator.CurrentMeasure?.MeasureNumber ?? 1;
-    if (measure !== currentMeasureRef.current) {
+    const gNote = ordered[index];
+    const selected = graphicalNoteToSelected(gNote);
+    if (!selected) {
+      playbackIndexRef.current = index + 1;
+      playbackTimerRef.current = window.setTimeout(
+        () => stepPlaybackRef.current(),
+        90,
+      );
+      return;
+    }
+
+    selectedGraphicalRef.current = gNote;
+    selectedGroupRef.current = [gNote];
+    highlightNotes(notesRef.current, selectedGroupRef.current);
+    callbacksRef.current.onPlaybackNotes([selected]);
+    callbacksRef.current.onSelectNote([selected]);
+    if (selected.measure !== currentMeasureRef.current) {
       skipMeasureSyncRef.current = true;
-      callbacksRef.current.onMeasureChange(measure);
+      callbacksRef.current.onMeasureChange(selected.measure);
+      setCursorToMeasure(osmd, selected.measure);
     }
 
-    const gNotes = osmd.cursor.GNotesUnderCursor();
-    const anchor =
-      gNotes.find((gNote) => graphicalNoteToSelected(gNote)) ?? gNotes[0];
-    const atMoment = anchor
-      ? notesAtSameMoment(notesRef.current, anchor, handModeRef.current)
-      : [];
-    const candidates = atMoment.filter((gNote) => {
-      if (gNote.sourceNote?.IsGraceNote) return false;
-      return graphicalNoteToSelected(gNote) !== null;
-    });
-
-    const slotMs = durationSecondsFromCursor(osmd, tempoRef.current) * 1000;
-
-    if (candidates.length === 0) {
-      osmd.cursor.next();
-      playbackTimerRef.current = window.setTimeout(
-        () => stepPlaybackRef.current(),
-        Math.max(80, slotMs),
-      );
-      return;
-    }
-
-    const [first, ...rest] = candidates;
-    playOne(first);
-    if (rest.length > 0) {
-      playbackQueueRef.current = rest;
-      const used = 120 * rest.length;
-      playbackSlotMsRef.current = Math.max(80, slotMs - used);
-      playbackTimerRef.current = window.setTimeout(
-        () => stepPlaybackRef.current(),
-        120,
-      );
-      return;
-    }
-
-    osmd.cursor.next();
+    const next = ordered[index + 1] ?? null;
+    playbackIndexRef.current = index + 1;
     playbackTimerRef.current = window.setTimeout(
       () => stepPlaybackRef.current(),
-      Math.max(80, slotMs),
+      waitMsBetweenNotes(gNote, next, tempoRef.current),
     );
   };
 
   useEffect(() => {
     const osmd = osmdRef.current;
-    if (!osmd?.cursor) return;
+    if (!osmd) return;
 
     if (playbackStatus === "playing") {
-      if (osmd.cursor.Hidden) osmd.cursor.show();
-      playbackQueueRef.current = [];
+      playbackIndexRef.current = -1;
       stopPlaybackTimer();
       stepPlaybackRef.current();
       return;
     }
 
     stopPlaybackTimer();
-    playbackQueueRef.current = [];
     if (playbackStatus === "idle") {
-      osmd.cursor.reset();
-      osmd.cursor.hide();
+      playbackIndexRef.current = 0;
+      osmd.cursor?.reset();
+      osmd.cursor?.hide();
       callbacksRef.current.onPlaybackNotes([]);
     }
   }, [playbackStatus, stopPlaybackTimer]);
