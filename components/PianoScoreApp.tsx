@@ -35,6 +35,7 @@ export default function PianoScoreApp() {
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const [title, setTitle] = useState<string | undefined>();
   const [rendering, setRendering] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const playbackStatusRef = useRef(playbackStatus);
   playbackStatusRef.current = playbackStatus;
@@ -101,36 +102,58 @@ export default function PianoScoreApp() {
   return (
     <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-zinc-100 text-zinc-900">
       <header className="shrink-0 border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-4">
-          <div>
-            <h1 className="text-xl font-medium tracking-tight">Piano Score</h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              Visualiza MusicXML, identifica cada nota y encuéntrala en el teclado.
-              {title ? ` · ${title}` : ""}
-            </p>
+        <div className="mx-auto flex w-full max-w-6xl flex-col px-6">
+          <div className="flex items-center justify-between gap-3 py-2">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-expanded={menuOpen}
+              className="flex min-w-0 items-center gap-3 text-left"
+            >
+              <span className="text-sm font-medium tracking-tight">
+                Piano Score
+              </span>
+              {title ? (
+                <span className="truncate text-sm text-zinc-500">{title}</span>
+              ) : null}
+              <span className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600">
+                {menuOpen ? "Cerrar menú" : "Menú"}
+              </span>
+            </button>
+            {!menuOpen && measureCount > 0 ? (
+              <span className="shrink-0 text-xs tabular-nums text-zinc-500">
+                Compás {currentMeasure} / {measureCount}
+              </span>
+            ) : null}
           </div>
-          <ScoreToolbar
-            fileName={fileName}
-            loading={loading}
-            currentMeasure={currentMeasure}
-            measureCount={measureCount}
-            tempo={tempo}
-            handMode={handMode}
-            playbackStatus={playbackStatus}
-            debug={debug}
-            onLoadFile={loadFile}
-            onLoadExample={loadExample}
-            onLoadGnossienne={loadGnossienne}
-            rendering={rendering}
-            onMeasureChange={setCurrentMeasure}
-            onTempoChange={setTempo}
-            onHandModeChange={setHandMode}
-            onPlay={() => setPlaybackStatus("playing")}
-            onPause={() => setPlaybackStatus("paused")}
-            onReset={() => setPlaybackStatus("idle")}
-            onDebugChange={setDebug}
-          />
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+          {menuOpen ? (
+            <div className="border-t border-zinc-200 py-3">
+              <ScoreToolbar
+                fileName={fileName}
+                loading={loading}
+                currentMeasure={currentMeasure}
+                measureCount={measureCount}
+                tempo={tempo}
+                handMode={handMode}
+                playbackStatus={playbackStatus}
+                debug={debug}
+                onLoadFile={loadFile}
+                onLoadExample={loadExample}
+                onLoadGnossienne={loadGnossienne}
+                rendering={rendering}
+                onMeasureChange={setCurrentMeasure}
+                onTempoChange={setTempo}
+                onHandModeChange={setHandMode}
+                onPlay={() => setPlaybackStatus("playing")}
+                onPause={() => setPlaybackStatus("paused")}
+                onReset={() => setPlaybackStatus("idle")}
+                onDebugChange={setDebug}
+              />
+              {error ? (
+                <p className="mt-2 text-sm text-red-700">{error}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </header>
 
