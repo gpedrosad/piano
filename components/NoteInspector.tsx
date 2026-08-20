@@ -36,23 +36,21 @@ export default function NoteInspector({
     return (
       <section className="min-w-0">
         {note ? (
-          <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-            <p className="text-2xl font-medium tracking-tight text-zinc-900">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <p className="text-base font-medium tracking-tight text-zinc-900 landscape:text-lg">
               {note.spanishName}
             </p>
-            <Meta label="Internacional" value={note.scientificName} />
-            <Meta label="MIDI" value={String(note.midi)} />
-            <Meta label="Mano" value={handLabel(note.hand)} />
-            <Meta label="Compás" value={String(note.measure)} />
-            <Meta label="Duración" value={note.duration ?? "—"} />
+            <span className="text-xs text-zinc-500">
+              {note.scientificName} · {handLabel(note.hand)} · Compás{" "}
+              {note.measure}
+              {note.duration ? ` · ${note.duration}` : ""}
+            </span>
           </div>
         ) : (
-          <p className="text-sm text-zinc-500">
-            Selecciona una nota del pentagrama
-          </p>
+          <p className="text-xs text-zinc-500">Selecciona una nota</p>
         )}
         {debug && debugInfo ? (
-          <pre className="mt-2 max-h-24 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700">
+          <pre className="mt-1 max-h-16 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700">
             {JSON.stringify(debugInfo, null, 2)}
           </pre>
         ) : null}

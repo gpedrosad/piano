@@ -18,6 +18,33 @@ import type {
   TooltipState,
 } from "@/types/music";
 
+function MenuIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      {open ? (
+        <>
+          <path d="M6 6l12 12" />
+          <path d="M18 6L6 18" />
+        </>
+      ) : (
+        <>
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 export default function PianoScoreApp() {
   const { musicXml, fileName, error, loading, loadFile, loadExample, loadGnossienne } =
     useMusicXml();
@@ -100,34 +127,30 @@ export default function PianoScoreApp() {
   }, [playbackMidis, selectedNote]);
 
   return (
-    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-zinc-100 text-zinc-900">
-      <header className="shrink-0 border-b border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl flex-col px-6">
-          <div className="flex items-center justify-between gap-3 py-2">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-expanded={menuOpen}
-              className="flex min-w-0 items-center gap-3 text-left"
-            >
-              <span className="text-sm font-medium tracking-tight">
-                Piano Score
-              </span>
-              {title ? (
-                <span className="truncate text-sm text-zinc-500">{title}</span>
-              ) : null}
-              <span className="rounded border border-zinc-300 px-2 py-0.5 text-xs text-zinc-600">
-                {menuOpen ? "Cerrar menú" : "Menú"}
-              </span>
-            </button>
-            {!menuOpen && measureCount > 0 ? (
-              <span className="shrink-0 text-xs tabular-nums text-zinc-500">
-                Compás {currentMeasure} / {measureCount}
-              </span>
-            ) : null}
-          </div>
-          {menuOpen ? (
-            <div className="border-t border-zinc-200 py-3">
+    <div className="app-shell relative flex h-dvh min-h-0 flex-col overflow-hidden bg-zinc-100 text-zinc-900">
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        aria-expanded={menuOpen}
+        aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+        className="absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white/90 text-zinc-800 shadow-sm"
+      >
+        <MenuIcon open={menuOpen} />
+      </button>
+
+      {menuOpen ? (
+        <>
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="absolute inset-0 z-20 bg-zinc-900/20"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="absolute inset-x-0 top-0 z-30 max-h-[min(70dvh,420px)] overflow-auto border-b border-zinc-200 bg-white pt-14 shadow-sm landscape:max-h-[85dvh]">
+            <div className="px-4 pb-4">
+              <p className="mb-3 truncate text-sm text-zinc-500">
+                {title ?? "Piano Score"}
+              </p>
               <ScoreToolbar
                 fileName={fileName}
                 loading={loading}
@@ -153,12 +176,12 @@ export default function PianoScoreApp() {
                 <p className="mt-2 text-sm text-red-700">{error}</p>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      </header>
+          </div>
+        </>
+      ) : null}
 
-      <main className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-3">
-        <section className="relative min-h-0 flex-1 overflow-auto overscroll-contain rounded border border-zinc-200 bg-white p-4">
+      <main className="flex min-h-0 flex-1 flex-col">
+        <section className="relative min-h-0 flex-1 overflow-auto overscroll-contain bg-white">
           {rendering ? (
             <p className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 text-sm text-zinc-500">
               Renderizando partitura…
@@ -189,21 +212,23 @@ export default function PianoScoreApp() {
         </section>
       </main>
 
-      <footer className="shrink-0 border-t border-zinc-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-3">
+      <footer className="piano-dock shrink-0 border-t border-zinc-200 bg-white pb-[env(safe-area-inset-bottom)]">
+        <div className="flex flex-col gap-0.5 px-2 pt-0.5 sm:px-4 sm:pt-1">
           <NoteInspector
             note={selectedNote}
             debug={debug}
             debugInfo={debugInfo}
             compact
           />
-          <PianoKeyboard
-            startMidi={33}
-            endMidi={84}
-            selectedMidi={selectedNote?.midi ?? null}
-            activeMidis={activeMidis}
-            onKeyClick={handlePianoClick}
-          />
+          <div className="piano-frame">
+            <PianoKeyboard
+              startMidi={33}
+              endMidi={84}
+              selectedMidi={selectedNote?.midi ?? null}
+              activeMidis={activeMidis}
+              onKeyClick={handlePianoClick}
+            />
+          </div>
         </div>
       </footer>
 

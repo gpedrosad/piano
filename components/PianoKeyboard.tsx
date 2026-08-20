@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   isWhiteKey,
   midiToNote,
@@ -23,6 +23,9 @@ export default function PianoKeyboard({
   onKeyClick,
 }: PianoKeyboardProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [whiteWidth, setWhiteWidth] = useState(28);
+  const [keyHeight, setKeyHeight] = useState(116);
+
   const keys = useMemo(() => {
     const list: Array<{ midi: number; white: boolean; name: string }> = [];
     for (let midi = startMidi; midi <= endMidi; midi += 1) {
@@ -37,14 +40,30 @@ export default function PianoKeyboard({
 
   const whiteKeys = keys.filter((key) => key.white);
   const blackKeys = keys.filter((key) => !key.white);
-  const whiteWidth = 28;
   const keyboardWidth = whiteKeys.length * whiteWidth;
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    const update = () => {
+      const available = scroller.clientWidth;
+      const height = scroller.clientHeight || 116;
+      setWhiteWidth(Math.max(18, Math.floor(available / whiteKeys.length)));
+      setKeyHeight(height);
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [whiteKeys.length]);
 
   const blackLeft = (midi: number) => {
     const whitesBefore = keys.filter(
       (key) => key.midi < midi && key.white,
     ).length;
-    return whitesBefore * whiteWidth - 9;
+    return whitesBefore * whiteWidth - whiteWidth * 0.32;
   };
 
   const isActive = (midi: number) =>
@@ -59,7 +78,7 @@ export default function PianoKeyboard({
 
     const keyRect = key.getBoundingClientRect();
     const scrollerRect = scroller.getBoundingClientRect();
-    const padding = 32;
+    const padding = 24;
     const alreadyVisible =
       keyRect.left >= scrollerRect.left + padding &&
       keyRect.right <= scrollerRect.right - padding;
@@ -75,18 +94,17 @@ export default function PianoKeyboard({
 
     scroller.scrollTo({
       left: Math.max(0, Math.min(max, nextLeft)),
-      behavior: "smooth",
     });
   }, [selectedMidi]);
 
   return (
     <div
       ref={scrollerRef}
-      className="w-full overflow-x-auto overscroll-x-contain"
+      className="h-full w-full overflow-x-auto overscroll-x-contain"
     >
       <div
-        className="relative mx-auto h-[116px]"
-        style={{ width: keyboardWidth, minWidth: keyboardWidth }}
+        className="relative h-full"
+        style={{ width: keyboardWidth, minWidth: "100%" }}
       >
         {whiteKeys.map((key) => {
           const active = isActive(key.midi);
@@ -106,10 +124,10 @@ export default function PianoKeyboard({
                   whiteKeys.findIndex((item) => item.midi === key.midi) *
                   whiteWidth,
                 width: whiteWidth,
-                height: 116,
+                height: keyHeight,
               }}
             >
-              <span className="absolute bottom-1.5 left-0 right-0 text-center text-[10px] text-zinc-500">
+              <span className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-zinc-500 landscape:text-[11px]">
                 {octaveLabel}
               </span>
             </button>
@@ -129,8 +147,8 @@ export default function PianoKeyboard({
               }`}
               style={{
                 left: blackLeft(key.midi),
-                width: 18,
-                height: 70,
+                width: whiteWidth * 0.62,
+                height: keyHeight * 0.62,
               }}
             />
           );

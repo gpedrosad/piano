@@ -20,6 +20,32 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+.app-shell {
+  --piano-h: 150px;
+}
+
+.piano-frame {
+  height: var(--piano-h);
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .app-shell {
+    --piano-h: min(26dvh, 190px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 820px) {
+  .app-shell {
+    --piano-h: min(46dvh, 280px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .app-shell {
+    --piano-h: min(52dvh, 240px);
+  }
+}
+
 .osmd-host svg {
   max-width: 100%;
   height: auto;
