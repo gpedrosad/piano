@@ -187,6 +187,33 @@ export default function PianoScoreApp() {
     }));
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (!musicXml) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        stepNote(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        stepNote(1);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [musicXml, stepNote]);
+
   const activeMidis = useMemo(() => {
     const values = [...playbackMidis];
     if (selectedNotes.length > 0) {
