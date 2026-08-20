@@ -15,7 +15,9 @@ import {
   graphicalNoteToSelected,
   highlightMeasure,
   highlightNotes,
+  notesAtSameMoment,
   notesMatch,
+  ownNotehead,
   scrollNoteIntoView,
   setCursorToMeasure,
   stepToPlayableNote,
@@ -77,6 +79,8 @@ export default function ScoreViewer({
   const selectedGroupRef = useRef<GraphicalNote[]>([]);
   const listenersRef = useRef<Array<() => void>>([]);
   const playbackTimerRef = useRef<number | null>(null);
+  const playbackQueueRef = useRef<GraphicalNote[]>([]);
+  const playbackSlotMsRef = useRef(0);
   const lastWidthRef = useRef(0);
   const skipMeasureSyncRef = useRef(false);
   const currentMeasureRef = useRef(currentMeasure);
@@ -166,9 +170,8 @@ export default function ScoreViewer({
         if (gNote.sourceNote?.isRest() || !gNote.sourceNote?.Pitch) continue;
         const vex = asVexNote(gNote);
         const targets: Element[] = [];
-        for (const head of vex?.getNoteheadSVGs?.() ?? []) {
-          if (head instanceof Element) targets.push(head);
-        }
+        const head = ownNotehead(gNote);
+        if (head) targets.push(head);
         const group = vex?.getSVGGElement?.();
         if (targets.length === 0 && group instanceof Element) {
           targets.push(group);
@@ -338,6 +341,33 @@ export default function ScoreViewer({
     if (!osmd?.cursor) return;
     if (playbackStatusRef.current !== "playing") return;
 
+    const playOne = (gNote: GraphicalNote) => {
+      const selected = graphicalNoteToSelected(gNote);
+      if (!selected) return false;
+      selectedGraphicalRef.current = gNote;
+      selectedGroupRef.current = [gNote];
+      highlightNotes(notesRef.current, selectedGroupRef.current);
+      callbacksRef.current.onPlaybackNotes([selected]);
+      callbacksRef.current.onSelectNote([selected]);
+      return true;
+    };
+
+    if (playbackQueueRef.current.length > 0) {
+      const next = playbackQueueRef.current.shift();
+      if (next) playOne(next);
+      const remaining = playbackQueueRef.current.length;
+      const waitMs =
+        remaining > 0
+          ? 120
+          : Math.max(80, playbackSlotMsRef.current);
+      if (remaining === 0) osmd.cursor.next();
+      playbackTimerRef.current = window.setTimeout(
+        () => stepPlaybackRef.current(),
+        waitMs,
+      );
+      return;
+    }
+
     if (osmd.cursor.iterator.EndReached) {
       osmd.cursor.reset();
       osmd.cursor.hide();
@@ -355,30 +385,44 @@ export default function ScoreViewer({
     }
 
     const gNotes = osmd.cursor.GNotesUnderCursor();
-    const candidates = gNotes
-      .map((gNote) => ({ gNote, selected: graphicalNoteToSelected(gNote) }))
-      .filter((item): item is { gNote: GraphicalNote; selected: SelectedNote } => {
-        if (!item.selected) return false;
-        if (handModeRef.current === "right") return item.selected.hand !== "left";
-        if (handModeRef.current === "left") return item.selected.hand !== "right";
-        return true;
-      });
-    const pick = candidates[0];
-    if (pick) {
-      selectedGraphicalRef.current = pick.gNote;
-      selectedGroupRef.current = [pick.gNote];
-      highlightNotes(notesRef.current, selectedGroupRef.current);
-      callbacksRef.current.onPlaybackNotes([pick.selected]);
-      callbacksRef.current.onSelectNote([pick.selected]);
-    } else {
-      callbacksRef.current.onPlaybackNotes([]);
+    const anchor =
+      gNotes.find((gNote) => graphicalNoteToSelected(gNote)) ?? gNotes[0];
+    const atMoment = anchor
+      ? notesAtSameMoment(notesRef.current, anchor, handModeRef.current)
+      : [];
+    const candidates = atMoment.filter((gNote) => {
+      if (gNote.sourceNote?.IsGraceNote) return false;
+      return graphicalNoteToSelected(gNote) !== null;
+    });
+
+    const slotMs = durationSecondsFromCursor(osmd, tempoRef.current) * 1000;
+
+    if (candidates.length === 0) {
+      osmd.cursor.next();
+      playbackTimerRef.current = window.setTimeout(
+        () => stepPlaybackRef.current(),
+        Math.max(80, slotMs),
+      );
+      return;
     }
 
-    const waitMs = durationSecondsFromCursor(osmd, tempoRef.current) * 1000;
+    const [first, ...rest] = candidates;
+    playOne(first);
+    if (rest.length > 0) {
+      playbackQueueRef.current = rest;
+      const used = 120 * rest.length;
+      playbackSlotMsRef.current = Math.max(80, slotMs - used);
+      playbackTimerRef.current = window.setTimeout(
+        () => stepPlaybackRef.current(),
+        120,
+      );
+      return;
+    }
+
     osmd.cursor.next();
     playbackTimerRef.current = window.setTimeout(
       () => stepPlaybackRef.current(),
-      waitMs,
+      Math.max(80, slotMs),
     );
   };
 
@@ -388,12 +432,14 @@ export default function ScoreViewer({
 
     if (playbackStatus === "playing") {
       if (osmd.cursor.Hidden) osmd.cursor.show();
+      playbackQueueRef.current = [];
       stopPlaybackTimer();
       stepPlaybackRef.current();
       return;
     }
 
     stopPlaybackTimer();
+    playbackQueueRef.current = [];
     if (playbackStatus === "idle") {
       osmd.cursor.reset();
       osmd.cursor.hide();

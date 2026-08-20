@@ -23,6 +23,7 @@ export type InteractiveGraphicalNote = GraphicalNote & {
   getSVGGElement?: () => SVGGElement | null;
   getNoteheadSVGs?: () => HTMLElement[];
   getSVGId?: () => string;
+  vfnoteIndex?: number;
   setColor?: (
     color: string,
     options?: {
@@ -247,6 +248,28 @@ export function notesMatch(
   );
 }
 
+export function notesAtSameMoment(
+  notes: InteractiveGraphicalNote[],
+  moment: GraphicalNote,
+  mode: HandMode,
+): InteractiveGraphicalNote[] {
+  const measure =
+    moment.sourceNote?.SourceMeasure?.MeasureNumber ??
+    moment.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.MeasureNumber ??
+    0;
+  const time = relativeTime(moment);
+  return playableNotesInOrder(notes).filter((note) => {
+    if (!isNoteInHandMode(note, mode)) return false;
+    const noteMeasure =
+      note.sourceNote?.SourceMeasure?.MeasureNumber ??
+      note.parentVoiceEntry?.parentStaffEntry?.parentMeasure?.MeasureNumber ??
+      0;
+    return (
+      noteMeasure === measure && Math.abs(relativeTime(note) - time) < 1e-6
+    );
+  });
+}
+
 export function stepToPlayableNote(
   notes: InteractiveGraphicalNote[],
   current: GraphicalNote | null,
@@ -284,10 +307,7 @@ export function scrollNoteIntoView(
   container: HTMLElement,
 ): void {
   const vex = asVexNote(note);
-  const el =
-    vex?.getSVGGElement?.() ??
-    vex?.getNoteheadSVGs?.()?.[0] ??
-    null;
+  const el = ownNotehead(note) ?? vex?.getSVGGElement?.() ?? null;
   if (!(el instanceof Element)) return;
 
   const scroller = container.parentElement;
@@ -332,9 +352,10 @@ export function highlightNotes(
   selected: GraphicalNote[],
 ): void {
   for (const note of notes) {
+    colorOwnNotehead(note, DEFAULT_COLOR);
     try {
       note.setColor?.(DEFAULT_COLOR, {
-        applyToNoteheads: true,
+        applyToNoteheads: false,
         applyToStem: true,
         applyToFlag: true,
       });
@@ -345,9 +366,10 @@ export function highlightNotes(
 
   for (const item of selected) {
     const target = item as InteractiveGraphicalNote;
+    colorOwnNotehead(target, SELECTED_COLOR);
     try {
       target.setColor?.(SELECTED_COLOR, {
-        applyToNoteheads: true,
+        applyToNoteheads: false,
         applyToStem: true,
         applyToFlag: true,
       });
@@ -466,6 +488,28 @@ export function asVexNote(note: GraphicalNote): VexFlowGraphicalNote | null {
   return null;
 }
 
+export function ownNotehead(note: GraphicalNote): HTMLElement | null {
+  const vex = asVexNote(note);
+  const heads = vex?.getNoteheadSVGs?.() ?? [];
+  if (heads.length === 0) return null;
+  const index = vex?.vfnoteIndex;
+  if (typeof index === "number" && heads[index]) return heads[index];
+  if (heads.length === 1) return heads[0];
+  return null;
+}
+
+function paintNotehead(head: HTMLElement, color: string): void {
+  head.setAttribute("fill", color);
+  for (const child of Array.from(head.children)) {
+    child.setAttribute("fill", color);
+  }
+}
+
+export function colorOwnNotehead(note: GraphicalNote, color: string): void {
+  const head = ownNotehead(note);
+  if (head) paintNotehead(head, color);
+}
+
 export function setCursorToMeasure(
   osmd: OpenSheetMusicDisplay,
   measureNumber: number,
@@ -526,12 +570,10 @@ export function durationSecondsFromCursor(
 }
 
 function setNoteOpacity(note: InteractiveGraphicalNote, opacity: number): void {
-  const vex = asVexNote(note);
-  const elements: Array<Element | null | undefined> = [];
-  if (vex) {
-    elements.push(vex.getSVGGElement?.());
-    elements.push(...(vex.getNoteheadSVGs?.() ?? []));
-  }
+  const elements: Array<Element | null | undefined> = [
+    ownNotehead(note),
+    asVexNote(note)?.getStemSVG?.(),
+  ];
   for (const el of elements) {
     if (el instanceof Element) {
       (el as HTMLElement).style.opacity = String(opacity);
