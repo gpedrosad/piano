@@ -11,6 +11,10 @@ export const metadata: Metadata = {
   title: "Piano Score",
   description:
     "Visualiza partituras MusicXML, identifica notas y estudia el teclado de piano.",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: "/apple-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
