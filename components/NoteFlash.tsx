@@ -15,7 +15,7 @@ export default function NoteFlash({ text, token }: NoteFlashProps) {
     if (!text || token === 0) return;
     setLabel(text);
     setVisible(true);
-    const hide = window.setTimeout(() => setVisible(false), 1400);
+    const hide = window.setTimeout(() => setVisible(false), 2200);
     return () => window.clearTimeout(hide);
   }, [text, token]);
 
@@ -24,7 +24,7 @@ export default function NoteFlash({ text, token }: NoteFlashProps) {
   return (
     <div
       aria-live="polite"
-      className={`pointer-events-none absolute top-[max(0.55rem,env(safe-area-inset-top))] left-1/2 z-40 max-w-[min(72vw,34rem)] -translate-x-1/2 rounded-full border border-zinc-200 bg-white/90 px-3 py-1 text-center text-sm font-medium tracking-wide text-zinc-900 shadow-sm transition-opacity duration-300 ${
+      className={`pointer-events-none fixed top-[max(3.35rem,calc(env(safe-area-inset-top)+2.85rem))] left-1/2 z-50 max-w-[min(92vw,36rem)] -translate-x-1/2 rounded-full bg-zinc-900 px-4 py-1.5 text-center text-base font-semibold tracking-wide text-white shadow-lg transition-opacity duration-300 landscape:text-xl ${
         visible ? "opacity-100" : "opacity-0"
       }`}
     >

@@ -24,6 +24,12 @@ import type {
   TooltipState,
 } from "@/types/music";
 
+function floatingButtonClass(disabled = false) {
+  return `flex h-11 w-11 touch-manipulation items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-900 shadow-md ${
+    disabled ? "opacity-40" : "active:bg-zinc-100"
+  }`;
+}
+
 function uniqueSelectedNotes(notes: SelectedNote[]): SelectedNote[] {
   const seen = new Set<number>();
   const unique: SelectedNote[] = [];
@@ -191,32 +197,40 @@ export default function PianoScoreApp() {
 
   return (
     <div className="app-shell relative flex h-dvh min-h-0 flex-col overflow-hidden bg-zinc-100 text-zinc-900">
-      <button
-        type="button"
-        onClick={() => setMenuOpen((open) => !open)}
-        aria-expanded={menuOpen}
-        aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
-        className="absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-40 flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white/90 text-zinc-800 shadow-sm"
-      >
-        <MenuIcon open={menuOpen} />
-      </button>
-
-      <div className="absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(3.25rem,calc(env(safe-area-inset-left)+2.75rem))] z-40 flex gap-1">
+      <div className="pointer-events-none fixed top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-50 flex gap-1.5">
         <button
           type="button"
-          onClick={() => stepNote(-1)}
+          onClick={(event) => {
+            event.stopPropagation();
+            setMenuOpen((open) => !open);
+          }}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? "Cerrar menú" : "Abrir menú"}
+          className={`pointer-events-auto ${floatingButtonClass()}`}
+        >
+          <MenuIcon open={menuOpen} />
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            stepNote(-1);
+          }}
           disabled={!musicXml}
           aria-label="Nota anterior"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white/90 text-zinc-800 shadow-sm disabled:opacity-40"
+          className={`pointer-events-auto ${floatingButtonClass(!musicXml)}`}
         >
           <ChevronIcon direction="prev" />
         </button>
         <button
           type="button"
-          onClick={() => stepNote(1)}
+          onClick={(event) => {
+            event.stopPropagation();
+            stepNote(1);
+          }}
           disabled={!musicXml}
           aria-label="Nota siguiente"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-white/90 text-zinc-800 shadow-sm disabled:opacity-40"
+          className={`pointer-events-auto ${floatingButtonClass(!musicXml)}`}
         >
           <ChevronIcon direction="next" />
         </button>
@@ -229,10 +243,10 @@ export default function PianoScoreApp() {
           <button
             type="button"
             aria-label="Cerrar menú"
-            className="absolute inset-0 z-20 bg-zinc-900/20"
+            className="fixed inset-0 z-40 bg-zinc-900/20"
             onClick={() => setMenuOpen(false)}
           />
-          <div className="absolute inset-x-0 top-0 z-30 max-h-[min(70dvh,420px)] overflow-auto border-b border-zinc-200 bg-white pt-14 shadow-sm landscape:max-h-[85dvh]">
+          <div className="fixed inset-x-0 top-0 z-40 max-h-[min(70dvh,420px)] overflow-auto border-b border-zinc-200 bg-white pt-16 shadow-sm landscape:max-h-[85dvh]">
             <div className="px-4 pb-4">
               <p className="mb-3 truncate text-sm text-zinc-500">
                 {title ?? "Piano Score"}
