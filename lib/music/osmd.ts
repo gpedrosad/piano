@@ -206,7 +206,8 @@ export function playableNotesInOrder(
       (note) =>
         Boolean(note.sourceNote) &&
         !note.sourceNote.isRest() &&
-        Boolean(note.sourceNote.Pitch),
+        Boolean(note.sourceNote.Pitch) &&
+        !note.sourceNote.IsGraceNote,
     )
     .slice()
     .sort((a, b) => {
@@ -246,90 +247,25 @@ export function notesMatch(
   );
 }
 
-function timeKey(value: number): number {
-  return Math.round(value * 1e6) / 1e6;
-}
-
-export function noteOnset(gNote: GraphicalNote): number {
-  const absolute = gNote.sourceNote?.getAbsoluteTimestamp?.()?.RealValue;
-  if (typeof absolute === "number") return absolute;
-  const measureAbs =
-    gNote.sourceNote?.SourceMeasure?.AbsoluteTimestamp?.RealValue ?? 0;
-  return measureAbs + relativeTime(gNote);
-}
-
-export function noteLength(gNote: GraphicalNote): number {
-  return gNote.sourceNote?.Length?.RealValue ?? 0;
-}
-
-export function soundingNotesAt(
-  notes: InteractiveGraphicalNote[],
-  moment: GraphicalNote,
-  mode: HandMode,
-): InteractiveGraphicalNote[] {
-  const t = timeKey(noteOnset(moment));
-  return playableNotesInOrder(notes).filter((note) => {
-    if (!isNoteInHandMode(note, mode)) return false;
-    const start = timeKey(noteOnset(note));
-    const end = timeKey(start + noteLength(note));
-    return start === t || (start < t && end > t);
-  });
-}
-
-export function notesStartingAtOnset(
-  notes: InteractiveGraphicalNote[],
-  onset: number,
-  mode: HandMode,
-): InteractiveGraphicalNote[] {
-  const t = timeKey(onset);
-  return playableNotesInOrder(notes).filter(
-    (note) =>
-      isNoteInHandMode(note, mode) && timeKey(noteOnset(note)) === t,
-  );
-}
-
-export function uniqueOnsets(
-  notes: InteractiveGraphicalNote[],
-  mode: HandMode,
-): number[] {
-  const keys = new Set<number>();
-  for (const note of playableNotesInOrder(notes)) {
-    if (!isNoteInHandMode(note, mode)) continue;
-    keys.add(timeKey(noteOnset(note)));
-  }
-  return [...keys].sort((a, b) => a - b);
-}
-
-export function stepToMomentNote(
+export function stepToPlayableNote(
   notes: InteractiveGraphicalNote[],
   current: GraphicalNote | null,
   direction: -1 | 1,
   mode: HandMode,
 ): GraphicalNote | null {
-  const onsets = uniqueOnsets(notes, mode);
-  if (onsets.length === 0) return null;
+  const ordered = playableNotesInOrder(notes).filter((note) =>
+    isNoteInHandMode(note, mode),
+  );
+  if (ordered.length === 0) return null;
 
-  const currentOnset = current ? timeKey(noteOnset(current)) : null;
-  let index =
-    currentOnset === null ? (direction > 0 ? -1 : onsets.length) : onsets.indexOf(currentOnset);
-
-  if (index === -1 && currentOnset !== null) {
-    if (direction > 0) {
-      index = onsets.findIndex((onset) => onset > currentOnset);
-      if (index === -1) return null;
-      return notesStartingAtOnset(notes, onsets[index], mode)[0] ?? null;
-    }
-    for (let i = onsets.length - 1; i >= 0; i -= 1) {
-      if (onsets[i] < currentOnset) {
-        return notesStartingAtOnset(notes, onsets[i], mode)[0] ?? null;
-      }
-    }
-    return null;
-  }
-
-  const next = index + direction;
-  if (next < 0 || next >= onsets.length) return null;
-  return notesStartingAtOnset(notes, onsets[next], mode)[0] ?? null;
+  const currentIndex = current
+    ? ordered.findIndex((note) => notesMatch(note, current))
+    : -1;
+  const from =
+    currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : ordered.length;
+  const next = from + direction;
+  if (next < 0 || next >= ordered.length) return null;
+  return ordered[next];
 }
 
 export function isNoteInHandMode(

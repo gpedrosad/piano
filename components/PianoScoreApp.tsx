@@ -33,7 +33,7 @@ function floatingButtonClass(disabled = false) {
 function uniqueSelectedNotes(notes: SelectedNote[]): SelectedNote[] {
   const seen = new Set<number>();
   const unique: SelectedNote[] = [];
-  for (const note of [...notes].sort((a, b) => a.midi - b.midi)) {
+  for (const note of notes) {
     if (seen.has(note.midi)) continue;
     seen.add(note.midi);
     unique.push(note);
@@ -92,7 +92,7 @@ function ChevronIcon({ direction }: { direction: "prev" | "next" }) {
 export default function PianoScoreApp() {
   const { musicXml, fileName, error, loading, loadFile, loadExample, loadGnossienne } =
     useMusicXml();
-  const { playNote, playNotes } = usePianoAudio();
+  const { playNote } = usePianoAudio();
 
   const [selectedNotes, setSelectedNotes] = useState<SelectedNote[]>([]);
   const [debugInfo, setDebugInfo] = useState<OsmdDebugInfo | null>(null);
@@ -139,25 +139,25 @@ export default function PianoScoreApp() {
 
   const handleSelectNote = useCallback(
     (notes: SelectedNote[], info?: OsmdDebugInfo) => {
-      const unique = uniqueSelectedNotes(notes);
+      const unique = uniqueSelectedNotes(notes).slice(0, 1);
       setSelectedNotes(unique);
       setDebugInfo(info ?? null);
-      if (playbackStatusRef.current !== "playing") {
-        void playNotes(unique.map((note) => note.scientificName));
+      const note = unique[0];
+      if (note && playbackStatusRef.current !== "playing") {
+        void playNote(note.scientificName);
         announceNotes(unique);
       }
     },
-    [announceNotes, playNotes],
+    [announceNotes, playNote],
   );
 
   const handlePlaybackNotes = useCallback(
     (notes: SelectedNote[]) => {
-      setPlaybackMidis(notes.map((note) => note.midi));
-      if (notes.length > 0) {
-        void playNotes(notes.map((note) => note.scientificName));
-      }
+      const note = uniqueSelectedNotes(notes)[0];
+      setPlaybackMidis(note ? [note.midi] : []);
+      if (note) void playNote(note.scientificName);
     },
-    [playNotes],
+    [playNote],
   );
 
   const handlePianoClick = useCallback(

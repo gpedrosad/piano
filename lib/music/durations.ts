@@ -19,13 +19,18 @@ const SPANISH_DURATION: Record<string, string> = {
 };
 
 export function durationFromOsmdNote(note: Note): string {
-  const dots = note.DotsXml || note.Length?.calculateNumberOfNeededDots?.() || 0;
+  const dots = dotsFromOsmdNote(note);
   const typeName = noteTypeToName(note);
   const spanish = SPANISH_DURATION[typeName] ?? typeName;
   if (!spanish) return "desconocida";
   if (dots === 1) return `${spanish} con puntillo`;
   if (dots >= 2) return `${spanish} con ${dots} puntillos`;
   return spanish;
+}
+
+function dotsFromOsmdNote(note: Note): number {
+  if (typeof note.DotsXml === "number" && note.DotsXml > 0) return note.DotsXml;
+  return 0;
 }
 
 function noteTypeToName(note: Note): string {
@@ -66,5 +71,7 @@ function noteTypeToName(note: Note): string {
 }
 
 function normalizeTypeName(raw: string): string {
-  return raw.toLowerCase().replace(/^_+/, "");
+  const name = raw.toLowerCase().replace(/^_+/, "");
+  if (name === "eigth") return "eighth";
+  return name;
 }

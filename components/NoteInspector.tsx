@@ -47,7 +47,7 @@ export default function NoteInspector({
             </p>
             <span className="text-xs text-zinc-500">
               {scientific} · Compás {note.measure}
-              {notes.length === 1 && note.duration ? ` · ${note.duration}` : ""}
+              {note.duration ? ` · ${note.duration}` : ""}
             </span>
           </div>
         ) : (

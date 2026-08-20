@@ -18,8 +18,7 @@ import {
   notesMatch,
   scrollNoteIntoView,
   setCursorToMeasure,
-  soundingNotesAt,
-  stepToMomentNote,
+  stepToPlayableNote,
   syncSecondaryCursor,
   type InteractiveGraphicalNote,
 } from "@/lib/music/osmd";
@@ -125,27 +124,19 @@ export default function ScoreViewer({
 
   const selectGraphicalNote = useCallback(
     (gNote: GraphicalNote) => {
-      const group = soundingNotesAt(
-        notesRef.current,
-        gNote,
-        handModeRef.current,
-      );
-      const sounding = (group.length > 0 ? group : [gNote])
-        .map((note) => graphicalNoteToSelected(note))
-        .filter((note): note is SelectedNote => note !== null);
-      if (sounding.length === 0) return;
+      const selected = graphicalNoteToSelected(gNote);
+      if (!selected) return;
 
       selectedGraphicalRef.current = gNote;
-      selectedGroupRef.current = group.length > 0 ? group : [gNote];
+      selectedGroupRef.current = [gNote];
       highlightNotes(notesRef.current, selectedGroupRef.current);
       callbacksRef.current.onSelectNote(
-        sounding,
+        [selected],
         debugRef.current ? debugInfoFromGraphicalNote(gNote) : undefined,
       );
-      const measure = sounding[0]?.measure;
-      if (measure && measure !== currentMeasureRef.current) {
+      if (selected.measure !== currentMeasureRef.current) {
         skipMeasureSyncRef.current = true;
-        callbacksRef.current.onMeasureChange(measure);
+        callbacksRef.current.onMeasureChange(selected.measure);
       }
     },
     [],
@@ -154,7 +145,7 @@ export default function ScoreViewer({
   useEffect(() => {
     if (!noteStep) return;
     const container = hostRef.current;
-    const nextNote = stepToMomentNote(
+    const nextNote = stepToPlayableNote(
       notesRef.current,
       selectedGraphicalRef.current,
       noteStep.direction,
@@ -243,12 +234,7 @@ export default function ScoreViewer({
         const rematched =
           notes.find((note) => notesMatch(note, current)) ?? current;
         selectedGraphicalRef.current = rematched;
-        const group = soundingNotesAt(
-          notes,
-          rematched,
-          handModeRef.current,
-        );
-        selectedGroupRef.current = group.length > 0 ? group : [rematched];
+        selectedGroupRef.current = [rematched];
         highlightNotes(notes, selectedGroupRef.current);
       }
     },
@@ -369,24 +355,21 @@ export default function ScoreViewer({
     }
 
     const gNotes = osmd.cursor.GNotesUnderCursor();
-    const anchor = gNotes[0];
-    if (anchor) {
-      const group = soundingNotesAt(
-        notesRef.current,
-        anchor,
-        handModeRef.current,
-      );
-      const displayed = (group.length > 0 ? group : gNotes)
-        .map((gNote) => graphicalNoteToSelected(gNote))
-        .filter((note): note is SelectedNote => note !== null);
-      const attacks = gNotes
-        .map((gNote) => graphicalNoteToSelected(gNote))
-        .filter((note): note is SelectedNote => note !== null);
-      selectedGraphicalRef.current = anchor;
-      selectedGroupRef.current = group.length > 0 ? group : gNotes;
+    const candidates = gNotes
+      .map((gNote) => ({ gNote, selected: graphicalNoteToSelected(gNote) }))
+      .filter((item): item is { gNote: GraphicalNote; selected: SelectedNote } => {
+        if (!item.selected) return false;
+        if (handModeRef.current === "right") return item.selected.hand !== "left";
+        if (handModeRef.current === "left") return item.selected.hand !== "right";
+        return true;
+      });
+    const pick = candidates[0];
+    if (pick) {
+      selectedGraphicalRef.current = pick.gNote;
+      selectedGroupRef.current = [pick.gNote];
       highlightNotes(notesRef.current, selectedGroupRef.current);
-      callbacksRef.current.onPlaybackNotes(attacks);
-      if (displayed.length > 0) callbacksRef.current.onSelectNote(displayed);
+      callbacksRef.current.onPlaybackNotes([pick.selected]);
+      callbacksRef.current.onSelectNote([pick.selected]);
     } else {
       callbacksRef.current.onPlaybackNotes([]);
     }
