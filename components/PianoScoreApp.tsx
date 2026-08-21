@@ -92,7 +92,7 @@ function ChevronIcon({ direction }: { direction: "prev" | "next" }) {
 export default function PianoScoreApp() {
   const { musicXml, fileName, error, loading, loadFile, loadExample, loadGnossienne } =
     useMusicXml();
-  const { playNote } = usePianoAudio();
+  const { playNote, playNotes } = usePianoAudio();
 
   const [selectedNotes, setSelectedNotes] = useState<SelectedNote[]>([]);
   const [debugInfo, setDebugInfo] = useState<OsmdDebugInfo | null>(null);
@@ -141,25 +141,32 @@ export default function PianoScoreApp() {
 
   const handleSelectNote = useCallback(
     (notes: SelectedNote[], info?: OsmdDebugInfo) => {
-      const unique = uniqueSelectedNotes(notes).slice(0, 1);
+      const unique = uniqueSelectedNotes(notes);
       setSelectedNotes(unique);
       setDebugInfo(info ?? null);
-      const note = unique[0];
-      if (note && playbackStatusRef.current !== "playing") {
-        void playNote(note.scientificName);
+      if (unique.length > 0 && playbackStatusRef.current !== "playing") {
+        if (unique.length === 1) {
+          void playNote(unique[0].scientificName);
+        } else {
+          void playNotes(unique.map((note) => note.scientificName));
+        }
         announceNotes(unique);
       }
     },
-    [announceNotes, playNote],
+    [announceNotes, playNote, playNotes],
   );
 
   const handlePlaybackNotes = useCallback(
     (notes: SelectedNote[]) => {
-      const note = uniqueSelectedNotes(notes)[0];
-      setPlaybackMidis(note ? [note.midi] : []);
-      if (note) void playNote(note.scientificName);
+      const unique = uniqueSelectedNotes(notes);
+      setPlaybackMidis(unique.map((note) => note.midi));
+      if (unique.length === 1) {
+        void playNote(unique[0].scientificName);
+      } else if (unique.length > 1) {
+        void playNotes(unique.map((note) => note.scientificName));
+      }
     },
-    [playNote],
+    [playNote, playNotes],
   );
 
   const handlePianoClick = useCallback(

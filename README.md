@@ -20,6 +20,17 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Reproducción de acordes
+
+La reproducción y la navegación con las flechas trabajan por **ataques musicales**, no por cabezas de nota individuales:
+
+- Las notas normales con el mismo timestamp absoluto se reproducen, resaltan y muestran juntas.
+- El filtro de mano se aplica antes de formar el grupo, de modo que los modos “Derecha” e “Izquierda” sólo incluyen su pentagrama.
+- Las notas de gracia permanecen como eventos individuales aunque OSMD les asigne el mismo timestamp que a la nota principal. Esto evita que una acciaccatura suene como parte del acorde.
+- Un clic directo sobre una cabeza de nota sigue seleccionando únicamente esa nota para poder inspeccionarla por separado.
+
+`ScoreViewer` forma los grupos a partir de `noteTimestamp`, `PianoScoreApp` conserva todos sus MIDI activos y `usePianoAudio` los entrega juntos al `PolySynth` mediante `playNotes`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

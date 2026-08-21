@@ -39,6 +39,7 @@ export type InteractiveGraphicalNote = GraphicalNote & {
 const SELECTED_COLOR = "#b45309";
 const DEFAULT_COLOR = "#111827";
 const UNIT = 10;
+const PLAYBACK_TIMESTAMP_EPSILON = 1e-4;
 
 export function createOsmd(container: HTMLElement): OpenSheetMusicDisplay {
   return new OpenSheetMusicDisplay(container, {
@@ -287,11 +288,28 @@ export function notesAtSameMoment(
   moment: GraphicalNote,
   mode: HandMode,
 ): InteractiveGraphicalNote[] {
-  const time = noteTimestamp(moment);
   return playableNotesInOrder(notes).filter((note) => {
     if (!isNoteInHandMode(note, mode)) return false;
-    return Math.abs(noteTimestamp(note) - time) < 1e-4;
+    return notesSharePlaybackAttack(note, moment);
   });
+}
+
+/**
+ * Notes with the same attack are played and highlighted as one group.
+ * Grace notes intentionally remain individual events: MusicXML commonly gives
+ * them the same timestamp as the principal note even though they sound first.
+ */
+export function notesSharePlaybackAttack(
+  a: GraphicalNote | null,
+  b: GraphicalNote | null,
+): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.sourceNote?.IsGraceNote || b.sourceNote?.IsGraceNote) return false;
+  return (
+    Math.abs(noteTimestamp(a) - noteTimestamp(b)) <
+    PLAYBACK_TIMESTAMP_EPSILON
+  );
 }
 
 export function stepToPlayableNote(
@@ -306,11 +324,50 @@ export function stepToPlayableNote(
   if (ordered.length === 0) return null;
 
   const currentIndex = indexOfPlayableNote(ordered, current);
-  const from =
-    currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : ordered.length;
-  const next = from + direction;
-  if (next < 0 || next >= ordered.length) return null;
-  return ordered[next];
+  if (currentIndex < 0) {
+    if (direction > 0) return ordered[0];
+    let lastMomentStart = ordered.length - 1;
+    while (
+      lastMomentStart > 0 &&
+      notesSharePlaybackAttack(
+        ordered[lastMomentStart - 1],
+        ordered[lastMomentStart],
+      )
+    ) {
+      lastMomentStart -= 1;
+    }
+    return ordered[lastMomentStart];
+  }
+
+  const currentNote = ordered[currentIndex];
+  if (direction > 0) {
+    let next = currentIndex + 1;
+    while (
+      next < ordered.length &&
+      notesSharePlaybackAttack(ordered[next], currentNote)
+    ) {
+      next += 1;
+    }
+    return ordered[next] ?? null;
+  }
+
+  let previous = currentIndex - 1;
+  while (
+    previous >= 0 &&
+    notesSharePlaybackAttack(ordered[previous], currentNote)
+  ) {
+    previous -= 1;
+  }
+  if (previous < 0) return null;
+
+  const previousMoment = ordered[previous];
+  while (
+    previous > 0 &&
+    notesSharePlaybackAttack(ordered[previous - 1], previousMoment)
+  ) {
+    previous -= 1;
+  }
+  return ordered[previous];
 }
 
 export function isNoteInHandMode(

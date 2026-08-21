@@ -16,7 +16,9 @@ import {
   highlightMeasure,
   highlightNotes,
   isNoteInHandMode,
+  notesAtSameMoment,
   notesMatch,
+  notesSharePlaybackAttack,
   ownNotehead,
   indexOfPlayableNote,
   playableNotesInOrder,
@@ -127,24 +129,40 @@ export default function ScoreViewer({
     }
   }, []);
 
-  const selectGraphicalNote = useCallback(
-    (gNote: GraphicalNote) => {
-      const selected = graphicalNoteToSelected(gNote);
-      if (!selected) return;
+  const selectGraphicalNotes = useCallback(
+    (
+      gNotes: GraphicalNote[],
+      anchor: GraphicalNote,
+      includeDebugInfo = false,
+    ) => {
+      const selected = gNotes
+        .map((gNote) => graphicalNoteToSelected(gNote))
+        .filter((note): note is SelectedNote => note !== null);
+      if (selected.length === 0) return;
 
-      selectedGraphicalRef.current = gNote;
-      selectedGroupRef.current = [gNote];
+      selectedGraphicalRef.current = anchor;
+      selectedGroupRef.current = gNotes;
       highlightNotes(notesRef.current, selectedGroupRef.current);
       callbacksRef.current.onSelectNote(
-        [selected],
-        debugRef.current ? debugInfoFromGraphicalNote(gNote) : undefined,
+        selected,
+        includeDebugInfo && debugRef.current
+          ? debugInfoFromGraphicalNote(anchor)
+          : undefined,
       );
-      if (selected.measure !== currentMeasureRef.current) {
+      const measure = selected[0].measure;
+      if (measure !== currentMeasureRef.current) {
         skipMeasureSyncRef.current = true;
-        callbacksRef.current.onMeasureChange(selected.measure);
+        callbacksRef.current.onMeasureChange(measure);
       }
     },
     [],
+  );
+
+  const selectGraphicalNote = useCallback(
+    (gNote: GraphicalNote) => {
+      selectGraphicalNotes([gNote], gNote, true);
+    },
+    [selectGraphicalNotes],
   );
 
   useEffect(() => {
@@ -157,9 +175,14 @@ export default function ScoreViewer({
       handModeRef.current,
     );
     if (!nextNote) return;
-    selectGraphicalNote(nextNote);
+    const group = notesAtSameMoment(
+      notesRef.current,
+      nextNote,
+      handModeRef.current,
+    );
+    selectGraphicalNotes(group.length > 0 ? group : [nextNote], nextNote, true);
     if (container) scrollNoteIntoView(nextNote, container);
-  }, [noteStep, selectGraphicalNote]);
+  }, [noteStep, selectGraphicalNotes]);
 
   const attachNoteListeners = useCallback(
     (osmd: OpenSheetMusicDisplay, container: HTMLElement) => {
@@ -370,8 +393,15 @@ export default function ScoreViewer({
     }
 
     const gNote = ordered[index];
-    const selected = graphicalNoteToSelected(gNote);
-    if (!selected) {
+    const group = notesAtSameMoment(
+      notesRef.current,
+      gNote,
+      handModeRef.current,
+    );
+    const selected = group
+      .map((note) => graphicalNoteToSelected(note))
+      .filter((note): note is SelectedNote => note !== null);
+    if (selected.length === 0) {
       playbackIndexRef.current = index + 1;
       playbackTimerRef.current = window.setTimeout(
         () => stepPlaybackRef.current(),
@@ -381,18 +411,26 @@ export default function ScoreViewer({
     }
 
     selectedGraphicalRef.current = gNote;
-    selectedGroupRef.current = [gNote];
+    selectedGroupRef.current = group;
     highlightNotes(notesRef.current, selectedGroupRef.current);
-    callbacksRef.current.onPlaybackNotes([selected]);
-    callbacksRef.current.onSelectNote([selected]);
-    if (selected.measure !== currentMeasureRef.current) {
+    callbacksRef.current.onPlaybackNotes(selected);
+    callbacksRef.current.onSelectNote(selected);
+    const measure = selected[0].measure;
+    if (measure !== currentMeasureRef.current) {
       skipMeasureSyncRef.current = true;
-      callbacksRef.current.onMeasureChange(selected.measure);
-      setCursorToMeasure(osmd, selected.measure);
+      callbacksRef.current.onMeasureChange(measure);
+      setCursorToMeasure(osmd, measure);
     }
 
-    const next = ordered[index + 1] ?? null;
-    playbackIndexRef.current = index + 1;
+    let nextIndex = index + 1;
+    while (
+      nextIndex < ordered.length &&
+      notesSharePlaybackAttack(ordered[nextIndex], gNote)
+    ) {
+      nextIndex += 1;
+    }
+    const next = ordered[nextIndex] ?? null;
+    playbackIndexRef.current = nextIndex;
     playbackTimerRef.current = window.setTimeout(
       () => stepPlaybackRef.current(),
       waitMsBetweenNotes(gNote, next, tempoRef.current),
