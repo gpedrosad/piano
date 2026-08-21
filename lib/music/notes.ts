@@ -1,9 +1,6 @@
 import { AccidentalEnum, Pitch, type Note } from "opensheetmusicdisplay";
 import { scientificToSpanish } from "./midi";
 
-const FLAT_ORDER = [11, 4, 9, 2, 7, 0, 5];
-const SHARP_ORDER = [5, 0, 7, 2, 9, 4, 11];
-
 let scoreKeyFifths = 0;
 
 export function setScoreKeyFifths(fifths: number): void {
@@ -13,21 +10,12 @@ export function setScoreKeyFifths(fifths: number): void {
 export function midiFromOsmdNote(note: Note): number | null {
   if (note.isRest() || !note.Pitch) return null;
 
-  const alter = alterationFromWrittenPitch(note);
   const fromHalfTone = note.halfTone + 12;
-  let midi =
-    fromHalfTone >= 12 && fromHalfTone <= 127
-      ? fromHalfTone
-      : midiFromOsmdPitch(note.Pitch, fromHalfTone);
-
-  const writtenPc =
-    (((note.Pitch.FundamentalNote + alter) % 12) + 12) % 12;
-  const midiPc = ((midi % 12) + 12) % 12;
-  if (midiPc !== writtenPc) {
-    midi += writtenPc - midiPc;
+  if (fromHalfTone >= 12 && fromHalfTone <= 127) {
+    return fromHalfTone;
   }
 
-  return midi;
+  return midiFromOsmdPitch(note.Pitch, fromHalfTone);
 }
 
 export function midiFromOsmdPitch(pitch: Pitch, halfToneHint?: number): number {
@@ -75,19 +63,25 @@ export function alterationFromWrittenPitch(note: Note): number {
     return Pitch.HalfTonesFromAccidental(accidental);
   }
 
-  return keySignatureAlteration(pitch.FundamentalNote);
+  return soundingAlteration(note);
 }
 
-function keySignatureAlteration(letterPc: number): number {
-  if (scoreKeyFifths < 0) {
-    const count = Math.min(7, -scoreKeyFifths);
-    return FLAT_ORDER.slice(0, count).includes(letterPc) ? -1 : 0;
-  }
-  if (scoreKeyFifths > 0) {
-    const count = Math.min(7, scoreKeyFifths);
-    return SHARP_ORDER.slice(0, count).includes(letterPc) ? 1 : 0;
-  }
-  return 0;
+function soundingAlteration(note: Note): number {
+  const pitch = note.Pitch;
+  if (!pitch) return 0;
+
+  const natural =
+    pitch.FundamentalNote + 12 * (pitch.Octave + Pitch.OctaveXmlDifference);
+  let delta = note.halfTone - natural;
+  if (delta > 6) delta -= 12;
+  if (delta < -6) delta += 12;
+  if (delta >= -2 && delta <= 2) return delta;
+
+  const midiPc = ((((note.halfTone + 12) % 12) + 12) % 12);
+  let fromMidi = midiPc - pitch.FundamentalNote;
+  if (fromMidi > 6) fromMidi -= 12;
+  if (fromMidi < -6) fromMidi += 12;
+  return fromMidi >= -2 && fromMidi <= 2 ? fromMidi : 0;
 }
 
 function octaveForSpelling(
