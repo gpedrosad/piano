@@ -5,6 +5,7 @@ import NoteFlash from "@/components/NoteFlash";
 import NoteInspector from "@/components/NoteInspector";
 import NoteTooltip from "@/components/NoteTooltip";
 import PianoKeyboard from "@/components/PianoKeyboard";
+import PracticePanel from "@/components/PracticePanel";
 import ScoreToolbar from "@/components/ScoreToolbar";
 import ScoreViewer, { type NoteStepRequest } from "@/components/ScoreViewer";
 import { useMusicXml } from "@/hooks/useMusicXml";
@@ -15,6 +16,11 @@ import {
   parseScientificNote,
   scientificToSpanish,
 } from "@/lib/music/midi";
+import {
+  practiceGuideForScore,
+  selectedNotesFromPractice,
+  type PracticeItem,
+} from "@/lib/music/practice";
 import type {
   HandMode,
   OsmdDebugInfo,
@@ -108,6 +114,8 @@ export default function PianoScoreApp() {
   const [preferFlat, setPreferFlat] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuTab, setMenuTab] = useState<"score" | "practice">("practice");
+  const [practiceId, setPracticeId] = useState<string | null>(null);
   const [noteStep, setNoteStep] = useState<NoteStepRequest | null>(null);
   const [flash, setFlash] = useState<{ text: string | null; token: number }>({
     text: null,
@@ -137,12 +145,14 @@ export default function PianoScoreApp() {
     setDebugInfo(null);
     setPlaybackStatus("idle");
     setPlaybackMidis([]);
+    setPracticeId(null);
   }, []);
 
   const handleSelectNote = useCallback(
     (notes: SelectedNote[], info?: OsmdDebugInfo) => {
       const unique = uniqueSelectedNotes(notes);
       setSelectedNotes(unique);
+      setPracticeId(null);
       setDebugInfo(info ?? null);
       if (unique.length > 0 && playbackStatusRef.current !== "playing") {
         if (unique.length === 1) {
@@ -169,6 +179,32 @@ export default function PianoScoreApp() {
     [playNote, playNotes],
   );
 
+  const practiceGuide = useMemo(
+    () => practiceGuideForScore(fileName, title),
+    [fileName, title],
+  );
+
+  const handlePracticeItem = useCallback(
+    (item: PracticeItem) => {
+      const notes = uniqueSelectedNotes(
+        selectedNotesFromPractice(item, currentMeasure || 1),
+      );
+      setPracticeId(item.id);
+      setSelectedNotes(notes);
+      setDebugInfo(null);
+      if (notes.length === 1) {
+        void playNote(notes[0].scientificName, "2n");
+      } else {
+        void playNotes(
+          notes.map((note) => note.scientificName),
+          "2n",
+        );
+      }
+      announceNotes(notes);
+    },
+    [announceNotes, currentMeasure, playNote, playNotes],
+  );
+
   const handlePianoClick = useCallback(
     (midi: number, scientificName: string) => {
       const parsed = parseScientificNote(scientificName);
@@ -182,6 +218,7 @@ export default function PianoScoreApp() {
         hand: "unknown",
       };
       setSelectedNotes([note]);
+      setPracticeId(null);
       setDebugInfo(null);
       void playNote(scientificName);
       announceNotes([note]);
@@ -279,38 +316,72 @@ export default function PianoScoreApp() {
           <button
             type="button"
             aria-label="Cerrar menú"
-            className="fixed inset-0 z-40 bg-zinc-900/20"
+            className="fixed inset-x-0 top-0 bottom-[var(--piano-h)] z-40 bg-zinc-900/20"
             onClick={() => setMenuOpen(false)}
           />
-          <div className="fixed inset-x-0 top-0 z-40 max-h-[min(70dvh,420px)] overflow-auto border-b border-zinc-200 bg-white pt-16 shadow-sm landscape:max-h-[85dvh]">
-            <div className="px-4 pb-4">
-              <p className="mb-3 truncate text-sm text-zinc-500">
+          <div className="fixed inset-x-0 top-0 z-40 max-h-[calc(100dvh-var(--piano-h)-2.75rem)] overflow-auto border-b border-zinc-200 bg-white pt-14 shadow-sm">
+            <div className="px-4 pb-3">
+              <p className="mb-2 truncate text-sm text-zinc-500">
                 {title ?? "Piano Score"}
               </p>
-              <ScoreToolbar
-                fileName={fileName}
-                loading={loading}
-                currentMeasure={currentMeasure}
-                measureCount={measureCount}
-                tempo={tempo}
-                handMode={handMode}
-                playbackStatus={playbackStatus}
-                debug={debug}
-                onLoadFile={loadFile}
-                onLoadExample={loadExample}
-                onLoadGnossienne={loadGnossienne}
-                rendering={rendering}
-                onMeasureChange={setCurrentMeasure}
-                onTempoChange={setTempo}
-                onHandModeChange={setHandMode}
-                onPlay={() => setPlaybackStatus("playing")}
-                onPause={() => setPlaybackStatus("paused")}
-                onReset={() => setPlaybackStatus("idle")}
-                onDebugChange={setDebug}
-              />
-              {error ? (
-                <p className="mt-2 text-sm text-red-700">{error}</p>
-              ) : null}
+              <div className="mb-2 flex gap-1 rounded-lg border border-zinc-200 bg-zinc-100 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMenuTab("practice")}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm ${
+                    menuTab === "practice"
+                      ? "bg-white font-medium text-zinc-900 shadow-sm"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  Practicar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMenuTab("score")}
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm ${
+                    menuTab === "score"
+                      ? "bg-white font-medium text-zinc-900 shadow-sm"
+                      : "text-zinc-600"
+                  }`}
+                >
+                  Partitura
+                </button>
+              </div>
+              {menuTab === "practice" ? (
+                <PracticePanel
+                  guide={practiceGuide}
+                  activeId={practiceId}
+                  onPlayItem={handlePracticeItem}
+                />
+              ) : (
+                <>
+                  <ScoreToolbar
+                    fileName={fileName}
+                    loading={loading}
+                    currentMeasure={currentMeasure}
+                    measureCount={measureCount}
+                    tempo={tempo}
+                    handMode={handMode}
+                    playbackStatus={playbackStatus}
+                    debug={debug}
+                    onLoadFile={loadFile}
+                    onLoadExample={loadExample}
+                    onLoadGnossienne={loadGnossienne}
+                    rendering={rendering}
+                    onMeasureChange={setCurrentMeasure}
+                    onTempoChange={setTempo}
+                    onHandModeChange={setHandMode}
+                    onPlay={() => setPlaybackStatus("playing")}
+                    onPause={() => setPlaybackStatus("paused")}
+                    onReset={() => setPlaybackStatus("idle")}
+                    onDebugChange={setDebug}
+                  />
+                  {error ? (
+                    <p className="mt-2 text-sm text-red-700">{error}</p>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </>
